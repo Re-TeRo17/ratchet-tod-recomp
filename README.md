@@ -12,6 +12,9 @@ Direct3D 12, up to 4K and 60 fps.
 ![Game](https://img.shields.io/badge/game-BCES00052%20(EU)-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-yellow)
 
+[![Get it on RecompLauncher](https://recomplauncher.com/assets/press/launcher/badge-dark.svg)](https://recomplauncher.com/game/ratchet-tod-recomp)
+[![Verified developer on RecompStore](https://recompstore.com/assets/press/verified-dark.svg)](https://recompstore.com/dev/re-tero17)
+
 <img src="docs/screenshots/01_metropolis_kerwan.jpg" alt="Metropolis, Kerwan, running natively on PC at 4K" width="100%">
 
 <a href="https://github.com/Re-TeRo17/ratchet-tod-recomp/releases"><img src="docs/images/nav_download.png" alt="Download" width="250"></a>
