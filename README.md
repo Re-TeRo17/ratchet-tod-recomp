@@ -2,8 +2,9 @@
 
 <h1><img src="docs/images/banner.png" alt="Ratchet &amp; Clank: Tools of Destruction Recompiled" width="100%"></h1>
 
-**A native Windows port of the PlayStation 3 game, built by static recompilation: no emulator,
-Direct3D 12, up to 4K and 60 fps.**
+**Ratchet & Clank: Tools of Destruction for PC** (*Ratchet & Clank Future: Tools of Destruction*):
+a native Windows port of the PlayStation 3 game, built by static recompilation. No emulator,
+Direct3D 12, up to 4K and 60 fps.
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-blue)
 ![Renderer](https://img.shields.io/badge/renderer-Direct3D%2012-green)

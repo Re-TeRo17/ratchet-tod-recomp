@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ratchet &amp; Clank: Tools of Destruction for PC – native PS3 recomp (4K, 60 fps)</title>
+<meta name="description" content="Ratchet & Clank: Tools of Destruction Recompiled: a free, native Windows PC port of the PS3 game made by static recompilation. Real 4K, 60 fps target, DualSense adaptive triggers, rebindable controls. Needs your own EU disc (BCES00052).">
+<meta name="keywords" content="Ratchet and Clank, Tools of Destruction, Ratchet & Clank Future, PC port, PS3, static recompilation, recomp, ps3recomp, Windows, 4K, 60 fps, DualSense">
+<link rel="canonical" href="https://re-tero17.github.io/ratchet-tod-recomp/">
+<meta name="theme-color" content="#0b1838">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Ratchet & Clank: Tools of Destruction Recompiled – native PC port">
+<meta property="og:description" content="The PS3 classic running natively on Windows: real 4K, 60 fps target, DualSense triggers. Free and open source; bring your own EU disc.">
+<meta property="og:url" content="https://re-tero17.github.io/ratchet-tod-recomp/">
+<meta property="og:image" content="https://re-tero17.github.io/ratchet-tod-recomp/images/social_preview.jpg">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://re-tero17.github.io/ratchet-tod-recomp/images/social_preview.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Michroma&family=Exo+2:wght@400;600&display=swap" rel="stylesheet">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Ratchet & Clank: Tools of Destruction Recompiled",
+  "alternateName": "Ratchet & Clank Future: Tools of Destruction PC port",
+  "applicationCategory": "GameApplication",
+  "operatingSystem": "Windows 10, Windows 11 (x64)",
+  "softwareVersion": "1.0",
+  "datePublished": "2026-11-02",
+  "license": "https://opensource.org/licenses/MIT",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "downloadUrl": "https://github.com/Re-TeRo17/ratchet-tod-recomp/releases/latest",
+  "codeRepository": "https://github.com/Re-TeRo17/ratchet-tod-recomp",
+  "image": "https://re-tero17.github.io/ratchet-tod-recomp/images/social_preview.jpg",
+  "screenshot": "https://re-tero17.github.io/ratchet-tod-recomp/screenshots/01_metropolis_kerwan.jpg",
+  "author": { "@type": "Person", "name": "Re-TeRo17", "url": "https://github.com/Re-TeRo17" },
+  "description": "A native Windows port of Ratchet & Clank: Tools of Destruction (PlayStation 3) made by static recompilation, with a Direct3D 12 renderer."
+}
+</script>
+<style>
+:root {
+  --bg: #08122b; --bg2: #0d1d44; --panel: #143a7c; --panel2: #0f2c62; --line: #3d6fc4;
+  --edge: #6f9ae0; --orange: #e08a2a; --orange2: #b85d14; --text: #e8eef8; --muted: #a8b8d6;
+  --chamfer: 18px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; color: var(--text); font: 17px/1.6 "Exo 2", "Segoe UI", system-ui, sans-serif;
+  background: radial-gradient(1200px 600px at 50% -10%, #1b3f8f 0%, transparent 60%),
+              linear-gradient(180deg, var(--bg2) 0%, var(--bg) 45%, #050b1c 100%);
+  background-attachment: fixed;
+}
+a { color: #ffb45e; }
+.wrap { max-width: 1100px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+h1, h2, h3, .btn, .tag { font-family: Michroma, "Exo 2", sans-serif; letter-spacing: .04em; }
+h2 { font-size: 1.25rem; text-transform: uppercase; margin: 0 0 18px; }
+
+header { padding-block: 40px 10px; text-align: center; }
+header img.banner { width: 100%; max-width: 980px; height: auto; display: block; margin: 0 auto; }
+header h1 { font-size: clamp(1rem, 2.6vw, 1.45rem); font-weight: 400; margin: 18px auto 6px; max-width: 820px; text-wrap: balance; }
+header p.sub { color: var(--muted); margin: 0 auto 26px; max-width: 760px; text-wrap: balance; }
+
+.btns { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.btn {
+  display: inline-block; text-decoration: none; color: #fff; font-size: .95rem; text-transform: uppercase;
+  padding: 16px 34px; text-shadow: 0 2px 2px rgba(0,0,0,.45);
+  clip-path: polygon(var(--chamfer) 0, 100% 0, 100% calc(100% - var(--chamfer)), calc(100% - var(--chamfer)) 100%, 0 100%, 0 var(--chamfer));
+  transition: filter .15s, transform .15s;
+}
+.btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
+.btn.primary { background: radial-gradient(ellipse at center, #f2a043 0%, var(--orange) 45%, var(--orange2) 100%); box-shadow: inset 0 0 0 2px #ffcf8a; }
+.btn.secondary { background: linear-gradient(180deg, #2050a8, var(--panel2)); box-shadow: inset 0 0 0 2px var(--edge); }
+
+.panel {
+  position: relative; margin-block: 34px; padding: 28px 30px;
+  background: linear-gradient(180deg, rgba(31,74,150,.92), rgba(14,40,92,.95));
+  clip-path: polygon(var(--chamfer) 0, calc(100% - 40px) 0, 100% 40px, 100% 100%, 40px 100%, 0 calc(100% - 40px), 0 var(--chamfer));
+}
+.panel::before { content: ""; position: absolute; inset: 0; pointer-events: none; border-top: 2px solid var(--edge); }
+.panel h2 { display: inline-block; padding: 6px 18px; margin-left: -30px; margin-bottom: 20px;
+  background: linear-gradient(90deg, var(--orange2), var(--orange) 35%, var(--orange2)); }
+
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.feature { background: rgba(8,22,56,.55); padding: 16px 18px; border-left: 3px solid var(--orange); min-width: 0; }
+.feature h3 { font-size: .85rem; margin: 0 0 6px; text-transform: uppercase; color: #ffd29a; }
+.feature p { margin: 0; color: var(--muted); font-size: .95rem; }
+
+.gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.gallery figure { margin: 0; background: #050b1c; }
+.gallery img { width: 100%; height: auto; display: block; aspect-ratio: 1920 / 1056; object-fit: cover; }
+.gallery figcaption { font-size: .85rem; color: var(--muted); padding: 8px 10px; }
+
+table.perf { width: 100%; border-collapse: collapse; }
+table.perf td, table.perf th { padding: 8px 10px; border-bottom: 1px solid rgba(111,154,224,.3); text-align: left; }
+table.perf th { font-family: Michroma, sans-serif; font-size: .8rem; color: #ffd29a; font-weight: 400; }
+.scroll { overflow-x: auto; }
+
+ol.steps { margin: 0; padding-left: 22px; }
+ol.steps li { margin-bottom: 8px; }
+.note { color: var(--muted); font-size: .92rem; }
+
+footer { padding-block: 30px 50px; text-align: center; color: var(--muted); font-size: .85rem; }
+footer p { max-width: 820px; margin: 8px auto; }
+@media (max-width: 560px) { .panel { padding: 22px 18px; } .panel h2 { margin-left: -18px; } .btn { padding: 14px 24px; } }
+</style>
+</head>
+<body>
+<header class="wrap">
+  <img class="banner" src="images/banner.png" alt="Ratchet &amp; Clank: Tools of Destruction Recompiled" width="2560" height="584">
+  <h1>Ratchet &amp; Clank: Tools of Destruction for PC – a native port of the PS3 game</h1>
+  <p class="sub">Made by static recompilation: the game's PowerPC and SPU code runs as a native Windows program with a Direct3D 12 renderer. No emulator. Real 4K, a 60 fps target, DualSense adaptive triggers. Free and open source.</p>
+  <div class="btns">
+    <a class="btn primary" href="https://github.com/Re-TeRo17/ratchet-tod-recomp/releases/latest">Download 1.0</a>
+    <a class="btn secondary" href="https://github.com/Re-TeRo17/ratchet-tod-recomp">Source on GitHub</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="panel" aria-labelledby="features">
+    <h2 id="features">Features</h2>
+    <div class="features">
+      <div class="feature"><h3>Real 4K</h3><p>The game's 3D scene is no longer stretched: it renders sharp at 1080p, 1440p, 4K and beyond, with MSAA or FXAA and 16x anisotropic filtering.</p></div>
+      <div class="feature"><h3>60 fps target</h3><p>Native fast paths for the game's animation and collision code. Cobalia holds 60 fps at 4K on a Ryzen 5 3600 + RTX 3070.</p></div>
+      <div class="feature"><h3>Shadows and RT AO</h3><p>Character ground shadows are back, and ray-traced ambient occlusion is available on DXR 1.1 graphics cards.</p></div>
+      <div class="feature"><h3>DualSense triggers</h3><p>The right trigger clicks, rattles or resists like the weapon in Ratchet's hands, with a kick at every shot.</p></div>
+      <div class="feature"><h3>Settings in game</h3><p>Press F1 for resolution, anti-aliasing, frame rate, language, button prompts and fully rebindable keyboard and mouse.</p></div>
+      <div class="feature"><h3>Mods and saves</h3><p>A mods folder that replaces game files without touching them, RPCS3-style saves, and Discord Rich Presence.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="screens">
+    <h2 id="screens" class="wrap" style="padding:0">Screenshots</h2>
+    <div class="gallery">
+      <figure><img src="screenshots/01_metropolis_kerwan.jpg" alt="Ratchet and Clank in Metropolis on Kerwan, running natively on PC at 4K" loading="lazy" width="1920" height="1056"><figcaption>Metropolis (Kerwan) – the opening city, under attack</figcaption></figure>
+      <figure><img src="screenshots/02_meridian_city.jpg" alt="Meridian City with meteors, Ratchet & Clank Tools of Destruction PC port" loading="lazy" width="1920" height="1056"><figcaption>Meridian City – meteors over the capital</figcaption></figure>
+      <figure><img src="screenshots/03_arena_imperial_fight_fest.jpg" alt="Ratchet fighting in the Imperial Fight Fest arena" loading="lazy" width="1920" height="1056"><figcaption>Imperial Fight Fest – close combat in the arena</figcaption></figure>
+      <figure><img src="screenshots/04_rykan_v.jpg" alt="Ratchet on Rykan V, Ratchet &amp; Clank Tools of Destruction PC port" loading="lazy" width="1920" height="1056"><figcaption>Rykan V – the planet's fiery depths</figcaption></figure>
+      <figure><img src="screenshots/05_space_combat.jpg" alt="Space combat in front of a ringed gas giant" loading="lazy" width="1920" height="1056"><figcaption>Space combat – a ringed gas giant and nebula</figcaption></figure>
+      <figure><img src="screenshots/06_kerchu_city.jpg" alt="Kerchu City under pirate attack" loading="lazy" width="1920" height="1056"><figcaption>Kerchu City – the pirate-raided city under fire</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="perf">
+    <h2 id="perf">Performance</h2>
+    <p>Ryzen 5 3600 + RTX 3070, 4K with MSAA x8:</p>
+    <div class="scroll">
+      <table class="perf">
+        <thead><tr><th>Area</th><th>Before</th><th>1.0</th></tr></thead>
+        <tbody>
+          <tr><td>Cobalia</td><td>60</td><td>60 fps</td></tr>
+          <tr><td>Pirate Base</td><td>~52</td><td>~58 fps</td></tr>
+          <tr><td>Imperial Fight Fest (arena)</td><td>~49</td><td>~54 fps</td></tr>
+          <tr><td>Metropolis (opening)</td><td>~24</td><td>~31 fps</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">The heaviest scenes are limited by the CPU and are the main focus of the next updates.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="install">
+    <h2 id="install">Get started</h2>
+    <ol class="steps">
+      <li>You need <strong>your own copy of the European disc (BCES00052, v1.00)</strong>, dumped and decrypted as an <code>.iso</code> or a folder. Nothing of the game is in the download.</li>
+      <li>Download <code>tod-recomp-1.0-win64.zip</code> from the <a href="https://github.com/Re-TeRo17/ratchet-tod-recomp/releases/latest">Releases page</a> and unzip it (not in Program Files; about 24 GB free).</li>
+      <li>Run <strong>Install.bat</strong>, pick your disc and the game language, and press <strong>Play</strong>.</li>
+    </ol>
+    <p class="note">Windows 10/11 x64, a CPU with AVX2 (a fast 6+ core CPU recommended), a Direct3D 12 GPU, 16 GB RAM. Full details, settings and known issues are in the <a href="https://github.com/Re-TeRo17/ratchet-tod-recomp#readme">README</a>.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="support">
+    <h2 id="support">Support</h2>
+    <p>This is a free passion project made in my spare time. Bug reports go to <a href="https://github.com/Re-TeRo17/ratchet-tod-recomp/issues">GitHub Issues</a>. If you would like to support it, you can <a href="https://buymeacoffee.com/tero17">buy me a coffee</a>.</p>
+  </section>
+</main>
+
+<footer class="wrap">
+  <p>Built on <a href="https://github.com/sp00nznet/ps3recomp">ps3recomp</a>, with thanks to <a href="https://github.com/soyjxck/dod3-recomp">dod3-recomp</a> and <a href="https://github.com/HighDrexler/RACiT">RACiT</a>. Code released under the MIT License.</p>
+  <p>This project is not affiliated with or endorsed by Sony Interactive Entertainment, Insomniac Games or any other rights holder. <em>Ratchet &amp; Clank</em> and <em>Tools of Destruction</em> belong to their owners. No game files are included; the port only runs from a copy of the game you own.</p>
+</footer>
+</body>
+</html>
