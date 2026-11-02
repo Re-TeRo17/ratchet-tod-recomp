@@ -1,0 +1,82 @@
+# ---------------------------------------------------------------------------
+# Nothing from the game and nothing generated from it is ever committed.
+# The user's own disc is lifted locally into these folders (see README.md).
+# ---------------------------------------------------------------------------
+# Game data and the decrypted executable
+elf/
+game/
+gamedata/
+out/
+/local/
+saves/
+cache/
+*.iso
+*.bin
+*.elf
+*.ELF
+*.self
+*.SELF
+*.sprx
+*.prx
+*.pkg
+*.psarc
+*.sfo
+*.sdat
+*.edat
+*.rap
+*.rif
+*.dkey
+*.rsxcap
+*.pad
+ents.txt
+**/ents*.txt
+
+# Code generated from the game (PPU/SPU lifts) and SPU captures
+recompiled/
+spu/
+spu_p/
+spu_dumps*/
+spu_lift*/
+*.inc.gen
+**/gen/
+
+# Build output and binaries
+build/
+build_*/
+cmake-build-*/
+.venv/
+__pycache__/
+*.pyc
+*.exe
+*.dll
+*.pdb
+*.obj
+*.o
+*.lib
+*.a
+*.exp
+*.ilk
+*.dxbc
+*.dxil
+*.spv
+*.zip
+*.7z
+dist/
+
+# Logs, captures, local notes
+log/
+logs/
+*.log
+*.err
+*.out.txt
+*.local.md
+*.bak
+*.tmp
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+
+# Editor/OS leftovers and accidental folders
+Users*/

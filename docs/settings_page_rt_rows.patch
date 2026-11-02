@@ -1,0 +1,14 @@
+--- a/src/ui/tod_overlay.cpp	2026-10-26 09:39:40.483980000 +0100
++++ b/src/ui/tod_overlay.cpp	2026-10-26 09:39:40.590890200 +0100
+@@ -125,6 +125,11 @@
+           0, true, TAB_VIDEO });
+     add({ "RSX_ANISO", "Anisotropic filtering", "Sharper textures on ground and walls seen at an angle.",
+           { { "1", "Trilinear (off)" }, { "2", "2x" }, { "4", "4x" }, { "8", "8x" }, { "16", "16x" } }, 4, true, TAB_VIDEO });
++    add({ "RT_AO", "Ray-traced ambient occlusion",
++          "Contact shadows in corners, under objects and around characters, traced on the GPU (needs an RTX 20 / RDNA2 or newer GPU, ~1 ms).",
++          { { NULL, "Off" }, { "1", "On" } }, 0, false, TAB_VIDEO });
++    add({ "RT_AO_QUALITY", "Ray tracing quality", "Rays per pixel and resolution of the ray-traced effects. High uses the most rays (cleaner, costs more).",
++          { { "0", "Low" }, { "1", "Medium" }, { "2", "High" } }, 1, false, TAB_VIDEO });
+ 
+     add({ "PS3_LANG", "Language",
+           "The console system language the game sees: text, voices, subtitles.",

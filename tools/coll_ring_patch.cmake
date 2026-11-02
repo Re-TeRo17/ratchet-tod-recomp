@@ -1,0 +1,37 @@
+# coll_ring_patch.cmake (ring103) -- aggancio SPU dei ticket ad anello della collisione (SPU_COLL_RING).
+#
+#   coll_ring_patch(<spu_recomp.c originale di igCollBroadSpu> <dir di uscita> <var out = file patchato>)
+#
+# Copia patchata del lifted: dopo `#include "spu_helpers.h"` l'include di spu_ring_hook.h e, subito dopo la riga di definizione di
+# igCollBroadSpu_spu_func_00002640, la riga SPU_RING_HOOK(ctx, igCollBroadSpu_spu_func_00002640);. L'originale (condiviso) non si tocca;
+# il file di uscita e' riscritto SOLO se il contenuto cambia.
+function(coll_ring_patch orig outdir outvar)
+    file(READ "${orig}" txt)
+    set(inc_line "#include \"spu_helpers.h\"")
+    string(FIND "${txt}" "${inc_line}" ipos)
+    if(ipos LESS 0)
+        message(FATAL_ERROR "coll_ring_patch: ${orig}: include di spu_helpers.h non trovato")
+    endif()
+    string(REPLACE "${inc_line}" "${inc_line}\n#include \"spu_ring_hook.h\"" txt "${txt}")
+    set(fn "igCollBroadSpu_spu_func_00002640")
+    set(def "void ${fn}(spu_context* ctx) {\n")
+    string(FIND "${txt}" "${def}" dpos)
+    if(dpos LESS 0)
+        message(FATAL_ERROR "coll_ring_patch: ${orig}: definizione di ${fn} non trovata")
+    endif()
+    string(REPLACE "${def}" "${def}        SPU_RING_HOOK(ctx, ${fn});\n" txt "${txt}")
+    file(MAKE_DIRECTORY "${outdir}")
+    set(outc "${outdir}/spu_recomp.c")
+    set(old "")
+    if(EXISTS "${outc}")
+        file(READ "${outc}" old)
+    endif()
+    if(NOT old STREQUAL txt)
+        file(WRITE "${outc}" "${txt}")
+        message(STATUS "  coll ring: igCollBroadSpu patchato (gancio func_2640) -> ${outc}")
+    endif()
+    get_filename_component(origdir "${orig}" DIRECTORY)
+    configure_file("${origdir}/spu_recomp.h" "${outdir}/spu_recomp.h" COPYONLY)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${orig}" "${CMAKE_CURRENT_FUNCTION_LIST_FILE}")
+    set(${outvar} "${outc}" PARENT_SCOPE)
+endfunction()
