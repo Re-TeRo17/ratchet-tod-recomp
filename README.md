@@ -282,6 +282,10 @@ game already installed, it can also just change the language.
 
 **Updating from an older version:**
 
+From 1.1 on, run **`Update.bat`** in the game folder: it checks GitHub, asks before doing anything,
+downloads the new version and replaces only the port's files. To update by hand instead (and to go
+from 1.0 to 1.1, since 1.0 has no `Update.bat`):
+
 1. Close the game.
 2. Open the 1.1 zip. Inside there is a folder `tod-recomp-1.1`: copy **everything inside it** into
    your game folder (the one with `tod.exe`). When Windows asks, choose **Replace the files in the

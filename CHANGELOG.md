@@ -60,6 +60,9 @@ a pile of fixes for starting the game. Unzip it over 1.0: your settings and save
 - **Updates keep your settings:** the download now holds `tod.default.ini` instead of `tod.ini`, so
   unzipping a new version over the old one does not replace your `tod.ini` (it is made from the default
   at the first start). Your saves (`gamedata\`) and shader cache (`cache\`) were never in the download.
+- **`Update.bat`:** updates the port in one click. It checks GitHub, asks first, downloads the new
+  version and replaces only the port's own files; `tod.ini`, saves, shader cache and the installed game
+  are never touched.
 - **Update notice:** at start the game asks GitHub whether a newer version exists and shows it on screen
   and in F1 > System > Updates (nothing is downloaded; `TOD_UPDATE_CHECK = 0` turns it off). The version
   is now shown in F1, in the log and in a corner of the title screen and main menu (`TOD_VERSION_TAG = 0`
