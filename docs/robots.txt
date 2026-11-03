@@ -1,3 +1,0 @@
-User-agent: *
-Allow: /
-Sitemap: https://re-tero17.github.io/ratchet-tod-recomp/sitemap.xml

@@ -301,10 +301,13 @@ bool open_disc(const fs::path& source, Disc* disc, std::string* err)
             disc->source = source.parent_path();
     }
     const bool encrypted_hint = disc->is_iso && iso_has_region_table(disc->source);
+    /* 1.01: most reports of this were images decrypted with another release's key (the US disc's key on the
+     * European disc): the result looks just like a still-encrypted image, so the message names both. */
     static const char* const kEncMsg =
-        "this disc image is still disc-encrypted (a redump .iso as dumped). The installer needs a DECRYPTED image: "
-        "decrypt it first (for example with PS3 Disc Dumper or ps3dec and the disc's key), or point --install at the "
-        "folder that holds PS3_GAME.";
+        "this disc image is still disc-encrypted, or it was decrypted with the wrong key. The installer needs an "
+        "image decrypted with the key of the EUROPEAN disc BCES00052 (the key of another release, such as the US "
+        "disc BCUS-98127, does not work). Decrypt the original image again (for example with PS3 Disc Dumper or "
+        "ps3dec), or point the installer at the folder that holds PS3_GAME.";
     if (!(disc->is_iso ? list_iso(disc->source, &disc->files, err) : list_folder(disc->source, &disc->files, err)))
         return false;
     /* What the game reads from the disc: PS3_DISC.SFB and PS3_GAME/. Not an
@@ -359,7 +362,8 @@ bool open_disc(const fs::path& source, Disc* disc, std::string* err)
         }
         *err = disc->is_iso
                    ? "this disc image's EBOOT.BIN does not match the supported release. If the image came "
-                     "straight from a disc drive it is still disc-encrypted: make a decrypted one "
+                     "straight from a disc drive it is still disc-encrypted, or it was decrypted with the key of "
+                     "another release: decrypt it with the key of the European disc BCES00052 "
                      "(for example with PS3 Disc Dumper)."
                    : "this folder's EBOOT.BIN does not match the supported release (BCES00052 v01.00).";
         return false;

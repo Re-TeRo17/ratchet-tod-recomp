@@ -28,6 +28,7 @@
 #include <filesystem>
 #include "settings.h"                    /* tod.ini */
 #include "install/install.h"             /* --install / --check */
+#include "update/update_check.h"         /* TOD_RELEASE_VERSION, the update check */
 
 #ifdef _WIN32
 #include <timeapi.h>                     /* timeBeginPeriod */
@@ -61,6 +62,7 @@ void     cellGame_init_from_paramsfo(const char* sfo_path);   /* libs/system/cel
 void     tod_overlay_init(void);              /* src/ui/tod_overlay.cpp: F1 / SELECT held settings page */
 void     tod_input_init(void);                /* src/input/host_input.cpp */
 void     tod_prompts_init(void);              /* src/patches/prompts.cpp */
+void     tod_level_streams_init(void);        /* src/patches/level_streams.cpp */
 void     tod_mods_init(void);                 /* src/patches/mods.cpp: mods\ folder (TOD_MODS) */
 void     tod_discord_start(void);             /* src/discord/discord_rpc.cpp: Rich Presence thread */
 void     ppu_sysprx_register(void);           /* boot-critical CRT (sys_initialize_tls, ...) */
@@ -111,6 +113,90 @@ extern "C" void rsx_host_window_escape_closes(int on);   /* rsx_host_mouse.h */
 static long long s_syn_sleep_q, s_syn_sleep_us;   /* QPC at the synth tick's usleep and what it asked (tod_usleep_pre) */
 extern "C" unsigned g_tod_hero_handle = 0;   /* tod_bot.cpp: the hero, from the level's set_follow_cam */
 extern "C" unsigned ppu_boot_frames_presented(void);
+
+/* AUDIO_TICK_DIAG=<ms> (aud104; 1 = threshold 25 ms): per synth tick (func_006F17EC, called from syn_tick_timer_thread at lr 0x6F1BA0; the
+ * loop is: tick; usleep(1e6/rate); repeat). Independent of TOD_FNTRACE (the older block in tod_fntrace needs it, which is why [syn-late] never
+ * printed in aud103). One line per tick whose period (entry to entry) exceeds the threshold, splitting it into
+ *   slept   = tod_usleep_pre -> next tick entry (over = slept - asked: the OS wake-up delay),
+ *   work    = previous tick entry -> its usleep, with cpu = the thread's own CPU time in it (work - cpu = not running: preempted or blocked),
+ *   blk     = lv2 syscalls + HLE calls the thread made inside the work (count, sum, longest with kind / number-or-NID / guest lr),
+ * and the guest state (rate = what the previous tick asked: 60 normal, 240 = job still running; inflight; producer lag). Plus a 5 s summary line. */
+extern "C" volatile unsigned g_blk_diag_tid;
+extern "C" volatile unsigned g_syn_boost_tid;
+extern "C" volatile double g_blk_diag_cpus;
+extern "C" void (*g_blk_diag_fn)(unsigned kind, unsigned num, uint32_t lr, long long q0, long long q1);
+struct SynBlk { double sum_ms, max_ms, hle_ms; unsigned n, max_kind, max_num; uint32_t max_lr; };
+static SynBlk s_synblk;                 /* written by the synth thread only */
+static long long s_syn_sleep_cyc;       /* the thread's cycle counter at its usleep */
+static int s_syn_diag_on = -1;
+static void syn_blk_note(unsigned kind, unsigned num, uint32_t lr, long long q0, long long q1)
+{
+    if (kind == 0 && lr == 0x006F1BA0u && (num == 141 || num == 142)) return;   /* the tick's own sleep */
+    static double f = 0; if (f == 0) { LARGE_INTEGER x; QueryPerformanceFrequency(&x); f = (double)x.QuadPart; }
+    const double ms = (q1 - q0) * 1000.0 / f;
+    SynBlk& b = s_synblk; b.n++; b.sum_ms += ms; if (kind) b.hle_ms += ms;
+    if (ms > b.max_ms) { b.max_ms = ms; b.max_kind = kind; b.max_num = num; b.max_lr = lr; }
+}
+static void syn_tick_diag(ppu_context* ctx)
+{
+    static double thr = 25.0;
+    if (s_syn_diag_on < 0) {
+        const char* e = getenv("AUDIO_TICK_DIAG");
+        const int on = (e && e[0] && e[0] != '0') ? 1 : 0;
+        const double v = e ? atof(e) : 0; if (v > 1.0) thr = v;
+        s_syn_diag_on = on;
+    }
+    { /* AUDIO_SYN_LOCK_BOOST=1 (aud104, default off): the guest lwmutexes this thread waits on are held at THREAD_PRIORITY_HIGHEST by their holders
+       * (priority inheritance), see ppu_sysprx.cpp lwmd_taken. */
+      static int bst = -1;
+      if (bst < 0) { const char* e = getenv("AUDIO_SYN_LOCK_BOOST"); bst = (e && e[0] == '1') ? 1 : 0; }
+      if (bst > 0 && (uint32_t)ctx->lr == 0x006F1BA0u && g_syn_boost_tid == 0) { g_syn_boost_tid = (unsigned)ctx->thread_id; fprintf(stderr, "[syn-diag] lock boost on for thread %u\n", g_syn_boost_tid); } }
+    if (s_syn_diag_on <= 0 || (uint32_t)ctx->lr != 0x006F1BA0u) return;
+    static double f = 0, cpus = 1;          /* QPC ticks/s, thread cycles per us */
+    static long long tl = 0, tcyc = 0;      /* previous tick entry */
+    static unsigned nt = 0, hov[5], hwk[5]; static double t5 = 0, dtmax = 0, ovmax = 0, wkmax = 0, cpumax = 0, blkmax = 0;
+    LARGE_INTEGER q; ULONG64 cyc; QueryPerformanceCounter(&q); QueryThreadCycleTime(GetCurrentThread(), &cyc);
+    if (f == 0) {
+        LARGE_INTEGER x; QueryPerformanceFrequency(&x); f = (double)x.QuadPart;
+        LARGE_INTEGER a, b; ULONG64 c0, c1;          /* 4 ms spin once: cycles per us of this thread's own counter */
+        QueryPerformanceCounter(&a); QueryThreadCycleTime(GetCurrentThread(), &c0);
+        do { QueryPerformanceCounter(&b); } while ((b.QuadPart - a.QuadPart) * 1000.0 < 4.0 * f);
+        QueryThreadCycleTime(GetCurrentThread(), &c1);
+        cpus = (double)(c1 - c0) / ((b.QuadPart - a.QuadPart) * 1e6 / f);
+        g_blk_diag_cpus = cpus; g_blk_diag_fn = syn_blk_note; g_blk_diag_tid = (unsigned)ctx->thread_id;
+        fprintf(stderr, "[syn-diag] on: thread %u, %.0f thread cycles/us, late threshold %.0f ms\n", (unsigned)ctx->thread_id, cpus, thr);
+        QueryPerformanceCounter(&q); QueryThreadCycleTime(GetCurrentThread(), &cyc);
+        tl = q.QuadPart; tcyc = (long long)cyc; s_synblk = SynBlk{}; return;
+    }
+    const double dt = (q.QuadPart - tl) * 1000.0 / f;
+    const bool sl = s_syn_sleep_q > tl;
+    const double work = sl ? (s_syn_sleep_q - tl) * 1000.0 / f : -1, slept = sl ? (q.QuadPart - s_syn_sleep_q) * 1000.0 / f : -1;
+    const double asked = s_syn_sleep_us / 1000.0, over = sl ? slept - asked : -1;
+    const double cpu = sl ? (s_syn_sleep_cyc - tcyc) / cpus / 1000.0 : -1;
+    const SynBlk bl = s_synblk; s_synblk = SynBlk{};
+    nt++; if (dt > dtmax) dtmax = dt; if (over > ovmax) ovmax = over; if (work > wkmax) wkmax = work; if (cpu > cpumax) cpumax = cpu; if (bl.sum_ms > blkmax) blkmax = bl.sum_ms;
+    if (sl) {
+        hov[over < 1 ? 0 : over < 2 ? 1 : over < 5 ? 2 : over < 10 ? 3 : 4]++;
+        hwk[work < 1 ? 0 : work < 2 ? 1 : work < 5 ? 2 : work < 10 ? 3 : 4]++;
+    }
+    const double tms = q.QuadPart * 1000.0 / f;
+    if (dt > thr) {
+        const unsigned toc = (unsigned)ctx->gpr[2];
+        auto G = [&](int off) { return vm_read32(vm_read32(toc + off)); };
+        const unsigned ri = vm_read32(vm_read32(vm_read32(toc - 0x4994)) + 4) & 7, w = G(-0x497C), rate = G(-0x4970), fl = vm_read8(vm_read32(toc - 0x48EC));
+        fprintf(stderr, "[syn-late] qpc %.1f ms: dt=%.1f | slept=%.1f asked=%.1f over=%.1f | work=%.1f cpu=%.1f notrunning=%.1f | blk n=%u sum=%.1f max=%.1f (%s %u lr=%08X) hle=%.1f | rate=%u inflight=%u lag=%u frame=%u\n",
+                tms, dt, slept, asked, over, work, cpu, work - cpu, bl.n, bl.sum_ms, bl.max_ms, bl.max_kind ? "hle" : "sc", bl.max_num, bl.max_lr, bl.hle_ms,
+                rate, fl, (ri - w) & 7, ppu_boot_frames_presented());
+    }
+    if (tms - t5 >= 5000.0) {
+        if (t5) fprintf(stderr, "[syn-diag] 5s: %u ticks, dt max %.1f, over max %.1f, work max %.1f, cpu max %.1f, blk sum max %.1f ms; over hist <1,<2,<5,<10,more: %u %u %u %u %u; work hist: %u %u %u %u %u\n",
+                        nt, dtmax, ovmax, wkmax, cpumax, blkmax, hov[0], hov[1], hov[2], hov[3], hov[4], hwk[0], hwk[1], hwk[2], hwk[3], hwk[4]);
+        t5 = tms; nt = 0; dtmax = ovmax = wkmax = cpumax = blkmax = 0; memset(hov, 0, sizeof hov); memset(hwk, 0, sizeof hwk);
+    }
+    /* printing can block on stderr for ms: keep it out of the next tick's work */
+    QueryPerformanceCounter(&q); QueryThreadCycleTime(GetCurrentThread(), &cyc);
+    tl = q.QuadPart; tcyc = (long long)cyc;
+}
 extern "C" void tod_fntrace(unsigned addr, ppu_context* ctx)
 {
     if (addr == 0x0028BD60) {   /* set_follow_cam(handle, ...): always, the bot needs it */
@@ -227,6 +313,7 @@ extern "C" void tod_fntrace(unsigned addr, ppu_context* ctx)
         }
         return;
     }
+    if (addr == 0x006F17EC) syn_tick_diag(ctx);
     static int on = -1;
     if (on < 0) on = getenv("TOD_FNTRACE") ? 1 : 0;
     if (!on) return;
@@ -379,16 +466,10 @@ extern "C" void tod_fntrace(unsigned addr, ppu_context* ctx)
         static long long tkick = 0; static unsigned rp = 0, rph[6]; static double rtsum = 0, rtmax = 0; static unsigned rtn = 0;
         /* The last gap split: work = previous entry -> its usleep, over = slept minus asked. */
         static long long tentry = 0; static double wkmax = 0, ovmax = 0;
-        static int tickdiag = -1; if (tickdiag < 0) { const char* e = getenv("AUDIO_TICK_DIAG"); tickdiag = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        double wk1 = -1, ov1 = -1;
         if (tentry && s_syn_sleep_q > tentry) {
             const double wk = (s_syn_sleep_q - tentry) * 1000.0 / f0.QuadPart;
             const double ov = (q.QuadPart - s_syn_sleep_q) * 1000.0 / f0.QuadPart - s_syn_sleep_us / 1000.0;
-            wk1 = wk; ov1 = ov;
             if (wk > wkmax) wkmax = wk; if (ov > ovmax) ovmax = ov;
-        }
-        if (tickdiag && dt > 30.0) {   /* AUDIO_TICK_DIAG=1: one line per late tick (gap > 30 ms) */
-            fprintf(stderr, "[syn-late] t=%.3f dt=%.1f work=%.1f oversleep=%.1f frame=%u\n", t, dt, wk1, ov1, ppu_boot_frames_presented());
         }
         tentry = q.QuadPart;
         if (per == 0xF0) rp++;
@@ -946,8 +1027,30 @@ static void tod_usleep_pre(ppu_context* ctx, uint64_t* usec)
 {
     waitdiag_note(ctx, *usec);
     if ((uint32_t)ctx->lr != 0x006F1BA0u) return;
+    { /* AUDIO_SYN_PERIOD_LOG=<ms>: the synth tick's own cadence (aud103). One line per gap between two of its sleeps longer than <ms>,
+       * on the same clock as the [audio-gap] lines (QPC ms), with the sleep it asked for and the RSX frame. */
+      static int thr = -1; static long long last;
+      if (thr < 0) { const char* e = getenv("AUDIO_SYN_PERIOD_LOG"); thr = e ? atoi(e) : 0; }
+      if (thr > 0) {
+          LARGE_INTEGER q, f; QueryPerformanceCounter(&q); QueryPerformanceFrequency(&f);
+          if (last) { const double per = (q.QuadPart - last) * 1000.0 / f.QuadPart;
+              if (per > thr) fprintf(stderr, "[syn-per] qpc %.1f ms: period %.1f ms (asked %llu us) frame %u\n", q.QuadPart * 1000.0 / f.QuadPart, per, (unsigned long long)*usec, ppu_boot_frames_presented()); }
+          last = q.QuadPart; } }
     if (s_syn_repoll_us && *usec >= 4000 && *usec <= 4200) *usec = s_syn_repoll_us;
     LARGE_INTEGER q; QueryPerformanceCounter(&q); s_syn_sleep_q = q.QuadPart; s_syn_sleep_us = (long long)*usec;
+    if (s_syn_diag_on > 0) { ULONG64 c; QueryThreadCycleTime(GetCurrentThread(), &c); s_syn_sleep_cyc = (long long)c; }
+    /* AUDIO_SYN_SPIN=<us> (aud104, default off): the synth's long periodic sleep (not the 1 ms re-poll) is done here on a high-resolution
+     * timer that ends <us> before the deadline, then spins to the deadline (QPC); the runtime's usleep then gets 0. Cuts the OS wake-up delay
+     * of a plain timer wait at the price of <us> of one core per tick. */
+    { static int spin = -1; static double qf = 0; static HANDLE tm = NULL;
+      if (spin < 0) { const char* e = getenv("AUDIO_SYN_SPIN"); spin = e ? atoi(e) : 0; LARGE_INTEGER x; QueryPerformanceFrequency(&x); qf = (double)x.QuadPart; }
+      if (spin > 0 && *usec > (uint64_t)spin + 2000) {
+          const long long deadline = q.QuadPart + (long long)((double)*usec * qf / 1e6);
+          if (!tm) tm = CreateWaitableTimerExW(NULL, NULL, 0x2 /* HIGH_RESOLUTION */, TIMER_ALL_ACCESS);
+          if (tm) { LARGE_INTEGER due; due.QuadPart = -(LONGLONG)((*usec - (uint64_t)spin) * 10); SetWaitableTimer(tm, &due, 0, NULL, NULL, FALSE); WaitForSingleObject(tm, INFINITE); }
+          LARGE_INTEGER n; do { YieldProcessor(); QueryPerformanceCounter(&n); } while (n.QuadPart < deadline);
+          *usec = 0;
+      } }
 }
 
 static void set_default_env(const char* name, const char* value)
@@ -978,7 +1081,7 @@ static void fps_setup_argv(void)
 }
 
 /* ---------------------------------------------------------------------------
- * Ultrawide (TOD_ASPECT, opt-in, default off) -- idea after ratchet-retooled (no code taken).
+ * Ultrawide (TOD_ASPECT, opt-in, default off).
  * TOD_ASPECT = 16:9 | 21:9 | 32:9 | <w>:<h> | <ratio> | auto (the window's / screen's own shape).
  * The game picks its screen aspect from the video-out state (func_00501C40: aspect 2 -> the float at
  * guest 0x8A73FC = 16/9, else the 4/3 at 0x8A73F8) and stores it in the global graphics config
@@ -1300,6 +1403,40 @@ static void tod_timer_fix(void)
 }
 #endif
 
+/* 1.01: a start that fails must say why. Double-clicking tod.exe gives it a console that closes with the
+ * process, so the message also goes into a message box -- only when stdout is that console (Play.bat and the
+ * test scripts redirect it to a file and show or read the text themselves). TOD_ERROR_DIALOG=0: never. */
+static void startup_fail(const char* msg)
+{
+    fprintf(stderr, "ERROR: %s\n", msg);
+#ifdef _WIN32
+    const char* e = getenv("TOD_ERROR_DIALOG");
+    if (e && e[0] == '0') return;
+    if (GetFileType(GetStdHandle(STD_OUTPUT_HANDLE)) != FILE_TYPE_CHAR) return;
+    MessageBoxA(NULL, msg, "Ratchet & Clank: Tools of Destruction Recompiled", MB_OK | MB_ICONERROR);
+#endif
+}
+
+/* The game files that tod.exe needs, seen from `dir` (the disc root PS3_VFS_ROOT, absolute or relative to `dir`,
+ * and elf\EBOOT.ELF). */
+static bool tod_files_in(const std::filesystem::path& dir, std::string* missing)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const char* r = getenv("PS3_VFS_ROOT");
+    fs::path root = (r && *r) ? fs::path(r) : fs::path(TOD_DEFAULT_VFS_ROOT);
+    if (root.is_relative()) root = dir / root;
+    if (!fs::exists(root / "PS3_GAME/PARAM.SFO", ec)) {
+        if (missing) *missing = (root / "PS3_GAME").make_preferred().string();
+        return false;
+    }
+    if (!fs::exists(dir / TOD_DEFAULT_ELF, ec)) {
+        if (missing) *missing = (dir / TOD_DEFAULT_ELF).make_preferred().string();
+        return false;
+    }
+    return true;
+}
+
 int main(int argc, char** argv)
 {
 #ifdef _WIN32
@@ -1307,7 +1444,8 @@ int main(int argc, char** argv)
 #endif
 #if defined(TOD_X86_V3) && defined(_WIN32)
     if (!x86_v3_cpu()) {
-        fprintf(stderr, "This build needs a CPU with AVX2, FMA and BMI2. Rebuild with -DTOD_X86_LEVEL= .\n");
+        startup_fail("This build needs a CPU with AVX2, FMA and BMI2 (Intel 4th generation / AMD Ryzen or newer). "
+                     "Rebuild with -DTOD_X86_LEVEL= for an older CPU.");
         return 1;
     }
 #endif
@@ -1328,17 +1466,35 @@ int main(int argc, char** argv)
         todsetup::print_install_instructions(".");
         return 2;
     }
-    if (argc < 2 && !todsetup::installed(".").ready()) {
-        /* TODO(tod): an ImGui first-run wizard (dod3-recomp src/ui/ + third_party/imgui) instead of text. */
-        todsetup::print_install_instructions(".");
-        return 1;
+    if (argc < 2) {
+        /* 1.01: started from a shortcut or a launcher whose working folder is not the game's: the game files,
+         * the saves (gamedata\) and the shader cache are next to tod.exe, so use that folder. A working folder
+         * that has the files itself (the development runs) is kept. */
+        std::string missing;
+        if (!tod_files_in(".", &missing)) {
+            wchar_t m[MAX_PATH];
+            const DWORD n = GetModuleFileNameW(NULL, m, MAX_PATH);
+            const std::filesystem::path exe_dir = (n && n < MAX_PATH) ? std::filesystem::path(m).parent_path() : std::filesystem::path();
+            if (!exe_dir.empty() && tod_files_in(exe_dir, NULL) && SetCurrentDirectoryW(exe_dir.c_str()))
+                fprintf(stderr, "[boot] working folder set to the game's: %s\n", exe_dir.string().c_str());
+        }
+        if (!tod_files_in(".", &missing)) {
+            /* TODO(tod): an ImGui first-run wizard (dod3-recomp src/ui/ + third_party/imgui) instead of text. */
+            todsetup::print_install_instructions(".");
+            const std::string msg = "The game is not installed in this folder (or not completely): " + missing +
+                                    " is missing.\n\nRun Install.bat and choose your decrypted disc (European release "
+                                    "BCES00052). If you moved the game files, set PS3_VFS_ROOT in tod.ini.";
+            startup_fail(msg.c_str());
+            return 1;
+        }
     }
     const char* elf = argc >= 2 ? argv[1] : TOD_DEFAULT_ELF;
 #ifdef _WIN32
     tod_timer_fix();                    /* opt out of Windows 11 timer-resolution throttling + 1 ms timer resolution */
     setvbuf(stdout, NULL, _IONBF, 0);   /* unbuffered: do not lose prints on a kill */
 #endif
-    printf("=== Tools of Destruction Recompiled (BCES00052 1.00) ===\n");
+    printf("=== Tools of Destruction Recompiled %s (BCES00052 1.00) ===\n", TOD_RELEASE_VERSION);
+    tod_update_check_start();           /* background, a few seconds at most; TOD_UPDATE_CHECK=0 = off */
 
     /* TODO(tod): runtime defaults for the title go here (SPURS/GCM tweaks found
      * while booting). dod3 sets a dozen; none is known to apply yet. */
@@ -1388,13 +1544,15 @@ int main(int argc, char** argv)
     mkdir("cache", 0755);
 
     if (!alloc_guest_vm()) {
-        fprintf(stderr, "ERROR: could not allocate the guest address space\n");
+        startup_fail("Could not reserve the game's memory (the guest address space). Close other programs and try "
+                     "again; a 64-bit Windows with enough free memory is needed.");
         return 1;
     }
 
     uint32_t entry = ppu_load_elf(elf);
     if (!entry) {
-        fprintf(stderr, "ERROR: could not load %s\n", elf);
+        const std::string msg = std::string("Could not load ") + elf + ". Run Install.bat again to remake it from your disc.";
+        startup_fail(msg.c_str());
         return 1;
     }
 
@@ -1402,6 +1560,7 @@ int main(int argc, char** argv)
     aspect_patch_guest();    /* TOD_ASPECT: the 16/9 constant -> the chosen ratio */
     ppu_vfs_root = getenv("PS3_VFS_ROOT");
     printf("[boot] VFS root: %s\n", ppu_vfs_root);
+    tod_level_streams_init();
     tod_mods_init();         /* mods\ folder: indexed once here (silent when there is none) */
     /* The title id (BCES00052) from the disc's PARAM.SFO: cellGame's default is
      * a placeholder (BLES00000), which the title saw in BootCheck/DataCheck and

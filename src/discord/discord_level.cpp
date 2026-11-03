@@ -92,9 +92,22 @@ TodPresence tod_discord_presence()
     return { nullptr, nullptr };
 }
 
+/* 1 while no level has been loaded since boot (the buffer is still empty: boot and first main menu).
+ * Any thread; the overlay's version tag shows only then. After a level has loaded it stays 0, also back in the menu. */
+extern "C" int tod_no_level_yet(void)
+{
+    static bool loaded = false;
+    if (loaded) return 0;
+    const int now = read_level();
+    if (now == -3 || now == -2) return 1;
+    loaded = true;
+    return 0;
+}
+
 #else
 
 bool TodPresence::operator==(const TodPresence&) const { return true; }
 TodPresence tod_discord_presence() { return { nullptr, nullptr }; }
+extern "C" int tod_no_level_yet(void) { return 1; }
 
 #endif

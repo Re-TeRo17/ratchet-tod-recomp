@@ -6,6 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 
 static std::string s_path = "tod.ini";
 
@@ -23,10 +27,33 @@ const char* tod_settings_path() { return s_path.c_str(); }
 int tod_settings_load(const char* argv0)
 {
     std::string beside;
-    if (argv0) {
-        std::string a = argv0;
+    std::string a = argv0 ? argv0 : "";
+#ifdef _WIN32
+    /* 1.01: the exe's real path (argv[0] is only "tod" when it was started from PATH or by some launchers) */
+    { char m[MAX_PATH]; const DWORD n = GetModuleFileNameA(NULL, m, sizeof m); if (n && n < sizeof m) a = m; }
+#endif
+    {
         const size_t cut = a.find_last_of("/\\");
         if (cut != std::string::npos) beside = a.substr(0, cut + 1) + "tod.ini";
+    }
+    /* 1.01: the release ships tod.default.ini (an update unzipped over an older version must not replace the
+     * player's tod.ini); the first start makes tod.ini from it. */
+    if (!beside.empty()) {
+        FILE* t = fopen(beside.c_str(), "r");
+        if (t) fclose(t);
+        else {
+            const std::string def = beside.substr(0, beside.size() - 7) + "tod.default.ini";
+            FILE* in = fopen(def.c_str(), "rb");
+            FILE* out = in ? fopen(beside.c_str(), "wb") : NULL;
+            if (in && out) {
+                char buf[8192];
+                size_t n;
+                while ((n = fread(buf, 1, sizeof buf, in)) > 0) fwrite(buf, 1, n, out);
+                fprintf(stderr, "[settings] made %s from tod.default.ini\n", beside.c_str());
+            }
+            if (out) fclose(out);
+            if (in) fclose(in);
+        }
     }
     const std::string tried[2] = { beside, "tod.ini" };
     FILE* f = NULL;

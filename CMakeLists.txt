@@ -197,6 +197,7 @@ set(PORT_SOURCES
     src/input/tod_dualsense.cpp     # DualSense adaptive triggers per weapon (+ speaker)
     src/patches/prompts.cpp          # button prompts in the pad's own glyphs
     src/patches/sixaxis_default.cpp  # SIXAXIS off by default (TOD_SIXAXIS)
+    src/patches/level_streams.cpp
     src/patches/mods.cpp             # mods\ folder: files read instead of the game's (TOD_MODS)
     src/ui/tod_overlay.cpp           # F1 / SELECT held settings page (Dear ImGui over the D3D12 present)
     ${TOD_IMGUI_SOURCES}
@@ -204,6 +205,7 @@ set(PORT_SOURCES
     src/discord/discord_rpc.cpp     # Discord Rich Presence (own thread, named-pipe IPC, no SDK)
     src/discord/discord_level.cpp   # what the status says: current level / state from guest memory
     src/settings.cpp                # tod.ini
+    src/update/update_check.cpp     # 1.1: release version + background check for a newer release (TOD_UPDATE_CHECK)
     src/install/crypto.cpp          # first-run installer (tod --install)
     src/install/self.cpp
     src/install/iso.cpp

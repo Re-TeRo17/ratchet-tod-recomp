@@ -54,7 +54,10 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <deque>
+#include <mutex>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -69,13 +72,19 @@
 #include "rsx_d3d12_engine.h"
 #include "settings.h"
 #include "input/key_bindings.h"
+#include "update/update_check.h"    /* 1.01: version, update check */
 
 extern "C" {
 extern volatile int g_cellPad_input_block;     /* cellPad.c */
+void cellPad_poll(void);                       /* cellPad.c: poll the host pad now */
+void rsx_d3d12_engine_repaint(void);           /* rsx_d3d12_engine.c: present the last frame again (+ overlay) */
+typedef int (*cellSaveData_pick_hook_t)(int, int, const char* const*, const char* const*, int, int);
+void cellSaveData_set_pick_hook(cellSaveData_pick_hook_t fn);   /* cellSaveData.c */
 extern volatile int g_rsx_display_reload;      /* rsx_draw_engine.c: the renderer re-reads its display settings */
 extern int g_rsx_aniso;                        /* rsx_d3d12_engine.c: the live anisotropy level */
 extern int g_rsx_aa;                           /* rsx_draw_engine.c: 0 off, 1 FXAA, 2/4/8 MSAA */
 uint32_t tod_hero_handle(void);                /* tod_cheat.cpp: 0 = no level / hero yet */
+int tod_no_level_yet(void);                    /* discord_level.cpp: 1 until the first level has loaded */
 void tod_cheat_enqueue(const char* cmds);      /* tod_cheat.cpp: thread-safe, runs on the guest main thread */
 void tod_cheat_arm(void);
 int tod_cheat_state(int id);                   /* 0 god, 1 infinite ammo, 100+N game cheat N */
@@ -253,6 +262,14 @@ void init_rows()
         r.running = r.saved = r.pending = 0;
         add(r);
     }
+    {   /* 1.01: update_check.cpp */
+        Row r{ NULL, "Updates", "This is version " TOD_RELEASE_VERSION ". At start the game asks GitHub whether a newer release exists "
+               "(nothing is downloaded; TOD_UPDATE_CHECK = 0 in tod.ini turns it off). Opens the download page in the browser.",
+               { { "1", "Open download page" } }, 0, true, TAB_SYSTEM };
+        r.cheat = 5;      /* an action button, like "Saves folder" */
+        r.running = r.saved = r.pending = 0;
+        add(r);
+    }
 
     /* DualSense (tod_dualsense.cpp): read live every quarter second; no effect without a DualSense. */
     add({ "TOD_DS_TRIGGERS", "DualSense adaptive triggers",
@@ -265,6 +282,9 @@ void init_rows()
     add({ "TOD_DS_FIRE_R2", "Fire with R2 (DualSense)",
           "DualSense: the right trigger fires and R1 does what R2 does on the PS3 pad (the on-screen prompts keep saying R1 for fire). Off: the PS3 layout.",
           { { NULL, "On" }, { "0", "Off (R1)" } }, 0, true, TAB_SYSTEM });
+    add({ "TOD_XB_TRIGGERS", "Xbox impulse triggers",
+          "Xbox One / Series controller: the right trigger's motor kicks at every shot, like the weapon in Ratchet's hands. Strength: Trigger strength above. Does nothing on a controller without trigger motors.",
+          { { NULL, "On" }, { "0", "Off" } }, 0, true, TAB_SYSTEM });
 
     /* Cheats: the commands are tod_cheat.cpp's. Toggles: Off/On; buttons: one choice. Greyed until a level runs. */
     auto toggle = [](const char* label, const char* desc, const char* on, const char* off, int state_id, const char* group) {
@@ -645,6 +665,87 @@ bool s_cs_init;
 void push(const Ev& e) { EnterCriticalSection(&s_cs); if (s_ev.size() < 512) s_ev.push_back(e); LeaveCriticalSection(&s_cs); }
 void push_capture(int code) { push({ 4, (float)code, 0 }); }
 
+/* ---- save-slot picker (svpick) ----------------------------------------------------------------------------------------
+ * cellSaveDataListLoad2/ListSave2 (cellSaveData.c) call pick_hook() on the guest thread, which blocks there on a condition
+ * variable until the user chooses; the render side draws the list and feeds the result. */
+uint32_t s_pad_prev;
+std::atomic<bool> s_pick_on{false};
+std::atomic<uint64_t> s_pick_drawn{0};           /* GetTickCount64() of the last frame that drew the picker */
+std::mutex s_pick_m;
+std::condition_variable s_pick_cv;
+int s_pick_result = -3;                          /* -3 pending, -1 cancel, >= 0 the chosen entry */
+std::vector<std::string> s_pick_name, s_pick_info;
+int s_pick_new = -1, s_pick_sel;
+bool s_pick_save, s_pick_scroll, s_pick_hold;
+double s_pick_t0;
+uint64_t s_pick_hold_t0;
+
+void pick_finish(int r)
+{
+    std::lock_guard<std::mutex> g(s_pick_m);
+    if (s_pick_result != -3) return;
+    s_pick_result = r;
+    s_pick_cv.notify_all();
+}
+
+void pick_act(int act)
+{
+    const int n = (int)s_pick_name.size();
+    s_pick_scroll = true;
+    switch (act) {
+    case A_UP: if (n) s_pick_sel = (s_pick_sel + n - 1) % n; break;
+    case A_DOWN: if (n) s_pick_sel = (s_pick_sel + 1) % n; break;
+    case A_ACCEPT: pick_finish(s_pick_sel); break;
+    case A_BACK: case A_CLOSE: pick_finish(-1); break;
+    default: break;
+    }
+}
+
+int pick_hook(int is_save, int n, const char* const* names, const char* const* infos, int new_idx, int def_idx)
+{
+    if (!s_cs_init || n < 2 || s_pick_on.load() || s_open.load()) return -2;
+    {
+        std::lock_guard<std::mutex> g(s_pick_m);
+        s_pick_name.assign(names, names + n);
+        s_pick_info.assign(infos, infos + n);
+        s_pick_new = new_idx; s_pick_save = is_save != 0;
+        s_pick_sel = (def_idx >= 0 && def_idx < n) ? def_idx : 0;
+        s_pick_result = -3; s_pick_scroll = true;
+        s_pick_t0 = now_s();
+    }
+    EnterCriticalSection(&s_cs); s_ev.clear(); LeaveCriticalSection(&s_cs);
+    s_pad_prev = s_pad.load();
+    const int prev_block = g_cellPad_input_block;
+    s_pick_hold = false;
+    g_cellPad_input_block = 1;
+    s_pick_drawn.store(0);
+    s_pick_on.store(true);
+    fprintf(stderr, "[savepick] picker open (%s, %d entries, preselected #%d)\n", is_save ? "save" : "load", n, s_pick_sel);
+    const uint64_t t0 = GetTickCount64();
+    int r = -3;
+    bool no_ui = false;
+    for (;;) {
+        {   /* the guest thread is stuck here: it does the work the game's own loop would (pad poll, present the frame) */
+            std::unique_lock<std::mutex> lk(s_pick_m);
+            if (s_pick_cv.wait_for(lk, std::chrono::milliseconds(16), [] { return s_pick_result != -3; })) { r = s_pick_result; break; }
+        }
+        cellPad_poll();
+        rsx_d3d12_engine_repaint();
+        const uint64_t now = GetTickCount64(), drawn = s_pick_drawn.load();
+        if (!drawn && now - t0 > 4000) { no_ui = true; break; }                 /* never drew: no window / overlay failed */
+        if (drawn && now - drawn > 6000) { no_ui = true; break; }               /* stopped drawing: do not hang the game */
+    }
+    s_pick_on.store(false);
+    if (no_ui) {
+        fprintf(stderr, "[savepick] picker could not be drawn -> automatic pick\n");
+        g_cellPad_input_block = s_open.load() ? 1 : (prev_block ? 1 : 0);
+        return -2;
+    }
+    s_pick_hold = true; s_pick_hold_t0 = GetTickCount64();   /* keep the game's pad cleared until the buttons are released */
+    fprintf(stderr, "[savepick] picker closed: %s\n", r < 0 ? "cancel" : "chosen");
+    return r;
+}
+
 void set_open(bool on)
 {
     if (s_open.load() == on) return;
@@ -658,10 +759,11 @@ void set_open(bool on)
 int overlay_message(void*, unsigned msg, uintptr_t wp, intptr_t lp, intptr_t* result)
 {
     if (!s_cs_init) return 0;
-    const bool open = s_open.load();
+    const bool open = s_open.load() || s_pick_on.load();
     switch (msg) {
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
+        if (wp == VK_F1 && s_pick_on.load()) { *result = 0; return 1; }   /* the slot picker owns the input */
         if (wp == VK_F1) {
             if (!(lp & (1 << 30))) set_open(!open);
             *result = 0;
@@ -760,6 +862,8 @@ void srv_free(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE c, D3D12_GPU
     s_free.push_back((int)((c.ptr - s_cpu0.ptr) / s_inc));
 }
 
+ImFont* s_tag_font;    /* 1.01: Bahnschrift for the version tag, when Windows has it */
+
 void style_setup(float k)
 {
     ImGuiStyle st;
@@ -809,6 +913,12 @@ bool ensure_ready(void* devp, void* queuep, int frames, unsigned w, unsigned h)
     for (const char* f : fonts)
         if (GetFileAttributesA(f) != INVALID_FILE_ATTRIBUTES && io.Fonts->AddFontFromFileTTF(f, 0.0f)) { font = true; break; }
     if (!font) io.Fonts->AddFontDefault();
+    /* 1.01: the version tag of the title screen in Windows' own Bahnschrift (condensed, close to the menu's look;
+     * read from the player's Windows, never shipped). Missing (Windows 10 before 1709): the font above. */
+    {
+        const char* bahn = "C:\\Windows\\Fonts\\bahnschrift.ttf";
+        if (GetFileAttributesA(bahn) != INVALID_FILE_ATTRIBUTES) s_tag_font = io.Fonts->AddFontFromFileTTF(bahn, 0.0f);
+    }
     ImGui::GetStyle().FontSizeBase = 20.0f;
     s_scale_cur = 0.0f;
 
@@ -829,7 +939,6 @@ bool ensure_ready(void* devp, void* queuep, int frames, unsigned w, unsigned h)
 }
 
 int s_tab, s_sel;        /* s_sel: a row of the tab (visible index), or -1 - n for the footer button n */
-uint32_t s_pad_prev;
 double s_pad_next_rep;
 bool s_pad_wait_release;
 double s_auto_at = -1;
@@ -882,6 +991,7 @@ void change_value(Row& r, int dir)
     if (r.soon) return;
     if (r.ctl) { controls_change(r, dir); return; }     /* Controls tab (keys136) */
     if (r.cheat == 4) { open_saves_folder(); return; }
+    if (r.cheat == 5) { tod_update_open_page(); say("Opened the download page in the browser."); return; }
     if (r.cheat) { cheat_activate(r); return; }
     const int n = (int)r.choices.size();
     int cur = r.pending >= 0 ? r.pending : (dir > 0 ? -1 : 0);
@@ -892,6 +1002,7 @@ void change_value(Row& r, int dir)
 
 void do_act(int act)
 {
+    if (s_pick_on.load()) { pick_act(act); return; }
     s_scroll_follow = true;     /* a key / pad move: scroll the selected row into view (Controls tab) */
     if (controls_capturing()) {  /* waiting for a key: only "back" (the pad's circle) does anything: it cancels */
         if (act == A_BACK || act == A_CLOSE) controls_cancel();
@@ -984,7 +1095,11 @@ void build_page(float W, float H, float k)
     ImGui::TextUnformatted("SETTINGS");
     ImGui::PopStyleColor();
     ImGui::SameLine();
-    ImGui::TextDisabled("  Ratchet & Clank: Tools of Destruction - port");
+    ImGui::TextDisabled("  Ratchet & Clank: Tools of Destruction - port %s", TOD_RELEASE_VERSION);
+    if (tod_update_state() == 2) {      /* 1.01 */
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.55f, 0.9f, 0.55f, 1), "   Version %s is available: System > Updates", tod_update_latest());
+    }
     ImGui::Spacing();
 
     /* tabs */
@@ -1036,7 +1151,7 @@ void build_page(float W, float H, float k)
             ImGui::TextColored(ImVec4(0.7f, 0.8f, 1, 1), "%s", r.group);
             ImGui::Spacing();
         }
-        const bool grey = r.cheat && r.cheat != 4 && !r.ctl && !in_game;      /* a cheat with no level running: shown, inert */
+        const bool grey = r.cheat && r.cheat != 4 && r.cheat != 5 && !r.ctl && !in_game;      /* a cheat with no level running: shown, inert */
         if (s_tab == TAB_SOON && ri == 5) {
             ImGui::Spacing();
             ImGui::TextColored(ImVec4(0.7f, 0.8f, 1, 1), "Ray tracing (coming soon)");
@@ -1077,7 +1192,7 @@ void build_page(float W, float H, float k)
             dl->AddText(ImVec2(cx - vw * 0.5f, ty), vc, vt.c_str());
             const float ay = p.y + rh * 0.5f, ah = 8.0f * k;
             const ImVec2 lc(cx - colw * 0.5f + 10.0f * k, ay), rc(cx + colw * 0.5f - 10.0f * k, ay);
-            if (r.cheat == 2 || r.cheat == 4 || r.ctl == 1 || r.ctl == 3) {      /* a button (or a key binding): a pill round the word, no arrows */
+            if (r.cheat == 2 || r.cheat == 4 || r.cheat == 5 || r.ctl == 1 || r.ctl == 3) {      /* a button (or a key binding): a pill round the word, no arrows */
                 const float pad = 14.0f * k;
                 dl->AddRect(ImVec2(cx - vw * 0.5f - pad, p.y + 3.0f * k), ImVec2(cx + vw * 0.5f + pad, p.y + rh - 3.0f * k),
                             grey ? IM_COL32(90, 95, 110, 255) : selected ? IM_COL32(255, 200, 90, 255) : IM_COL32(150, 155, 170, 255),
@@ -1099,7 +1214,7 @@ void build_page(float W, float H, float k)
                 if (mx < cx - colw * 0.25f) change_value(r, -1);
                 else change_value(r, +1);
             }
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Right) && r.cheat != 2 && r.cheat != 4 && r.ctl != 1 && r.ctl != 3) { s_sel = my; change_value(r, -1); }
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Right) && r.cheat != 2 && r.cheat != 4 && r.cheat != 5 && r.ctl != 1 && r.ctl != 3) { s_sel = my; change_value(r, -1); }
             if (ImGui::IsItemClicked(ImGuiMouseButton_Right) && r.ctl == 1) { s_sel = my; controls_clear(r); }   /* unbind */
         } else {
             const char* t = "coming soon";
@@ -1211,10 +1326,141 @@ void fps_draw(float W, float k)
     }
 }
 
+/* 1.01: "a newer version is available", bottom-left for 25 s from the moment the check (update_check.cpp) says so. */
+double s_upd_until = -1;     /* -1: not shown yet; then the end of the notice */
+
+bool update_notice_on(double t)
+{
+    if (s_upd_until < 0) {
+        if (tod_update_state() != 2) return false;
+        s_upd_until = t + 25.0;
+    }
+    return t < s_upd_until;
+}
+
+void update_notice_draw(float H, float k)
+{
+    char line[160];
+    snprintf(line, sizeof line, "Version %s of the port is available (this is %s). F1 > System > Updates", tod_update_latest(),
+             TOD_RELEASE_VERSION);
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    const float pad = 8.0f * k, margin = 14.0f * k;
+    const ImVec2 sz = ImGui::CalcTextSize(line);
+    const ImVec2 a(margin, H - margin - sz.y - 2 * pad), b(margin + sz.x + 2 * pad, H - margin);
+    dl->AddRectFilled(a, b, IM_COL32(0, 0, 0, 170), 6.0f * k);
+    dl->AddText(ImVec2(a.x + pad, a.y + pad), IM_COL32(140, 230, 140, 255), line);
+}
+
+/* 1.01: the port's version, bottom-right, while no level is loaded (title screen, main menu, loading).
+ * TOD_VERSION_TAG=0 hides it. */
+bool version_tag_on()
+{
+    static int on = -1;
+    if (on < 0) { const char* e = getenv("TOD_VERSION_TAG"); on = !(e && e[0] == '0'); }
+    /* not tod_hero_handle() == 0: without cheats armed the hero is often not found in a level, so the tag stayed on in play */
+    return on && tod_no_level_yet() && tod_hero_handle() == 0;
+}
+
+void version_tag_draw(float W, float H, float k)
+{
+    static const char kLine[] = "TOOLS OF DESTRUCTION RECOMPILED " TOD_RELEASE_VERSION;
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    ImFont* f = s_tag_font ? s_tag_font : ImGui::GetFont();
+    const float size = 21.0f * k, margin = 14.0f * k;
+    const ImVec2 sz = f->CalcTextSizeA(size, FLT_MAX, 0.0f, kLine);
+    /* above the black band of the letterbox (the game's picture is 1280x704, a little wider than 16:9) */
+    const float pic_h = W * 704.0f / 1280.0f;
+    const float band = pic_h < H ? (H - pic_h) * 0.5f : 0.0f;
+    const ImVec2 at(W - margin - sz.x, H - band - margin - sz.y);
+    const float b = s_tag_font ? 0.7f * k : 0.0f;      /* a second pass a hair to the right: a bolder weight */
+    dl->AddText(f, size, ImVec2(at.x + 1.5f * k, at.y + 1.5f * k), IM_COL32(0, 0, 0, 110), kLine);   /* shadow */
+    if (b > 0) dl->AddText(f, size, ImVec2(at.x + 1.5f * k + b, at.y + 1.5f * k), IM_COL32(0, 0, 0, 110), kLine);
+    dl->AddText(f, size, at, IM_COL32(225, 225, 225, 125), kLine);      /* see-through: it must not compete with the menu */
+    if (b > 0) dl->AddText(f, size, ImVec2(at.x + b, at.y), IM_COL32(225, 225, 225, 125), kLine);
+}
+
 /* TOD_OVERLAY_SCRIPT (debug): "<sec>:<cmd>,..." run on the render thread, one per present, seconds since the first present. */
 struct ScriptItem { double t; std::string cmd; };
 std::vector<ScriptItem> s_script;
 double s_script_t0;
+
+void pick_pad(double t)
+{
+    const uint32_t b = s_pad.load();
+    if (t - s_pick_t0 < 0.35) { s_pad_prev = b; return; }      /* the press that opened the dialog */
+    const uint32_t down = b & ~s_pad_prev;
+    struct { uint32_t bit; int act; bool rep; } map[] = {
+        { CELL_PAD_CTRL_UP, A_UP, true }, { CELL_PAD_CTRL_DOWN, A_DOWN, true },
+        { CELL_PAD_CTRL_CROSS, A_ACCEPT, false }, { CELL_PAD_CTRL_CIRCLE, A_BACK, false },
+    };
+    for (auto& m : map) {
+        if (down & m.bit) {
+            pick_act(m.act);
+            if (m.rep) s_pad_next_rep = t + 0.40;
+        } else if (m.rep && (b & m.bit) && t >= s_pad_next_rep && !(down & 0xFFFF)) {
+            pick_act(m.act);
+            s_pad_next_rep = t + 0.09;
+        }
+    }
+    s_pad_prev = b;
+}
+
+/* TOD_SAVE_PICKER_SCRIPT="down,down,act,back,...": test hook, one command every 0.8 s starting 2 s after the picker opens. */
+void pick_script(double t)
+{
+    static int idx = 0;
+    static double last_t0 = -1;
+    if (last_t0 != s_pick_t0) { last_t0 = s_pick_t0; idx = 0; }
+    const char* e = getenv("TOD_SAVE_PICKER_SCRIPT");
+    if (!e || !*e) return;
+    std::string all = e; std::vector<std::string> cmds; size_t pos = 0;
+    while (pos <= all.size()) { size_t c = all.find(',', pos); if (c == std::string::npos) c = all.size(); cmds.push_back(all.substr(pos, c - pos)); pos = c + 1; }
+    if (idx >= (int)cmds.size() || t - s_pick_t0 < 2.0 + 0.8 * idx) return;
+    const std::string& c = cmds[idx++];
+    fprintf(stderr, "[savepick] script: %s\n", c.c_str());
+    if (c == "down") pick_act(A_DOWN); else if (c == "up") pick_act(A_UP);
+    else if (c == "act") pick_act(A_ACCEPT); else if (c == "back") pick_act(A_BACK);
+}
+
+void build_picker(float W, float H, float k)
+{
+    ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0, 0), ImVec2(W, H), IM_COL32(0, 0, 0, 170));
+    const float pw = std::min(W - 40.0f * k, 760.0f * k);
+    const int n = (int)s_pick_name.size();
+    const float rowh = 62.0f * k;
+    const float ph = std::min(H - 40.0f * k, 150.0f * k + rowh * (float)std::min(n, 8));
+    ImGui::SetNextWindowPos(ImVec2(W * 0.5f, H * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(pw, ph));
+    ImGui::Begin("##tod_savepick", NULL,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav |
+                 ImGuiWindowFlags_NoScrollbar);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.98f, 0.62f, 0.16f, 1));
+    ImGui::TextUnformatted(s_pick_save ? "SAVE GAME - choose a slot" : "LOAD GAME - choose a save");
+    ImGui::PopStyleColor();
+    ImGui::Separator();
+    ImGui::BeginChild("##pick_list", ImVec2(0, ph - 110.0f * k), false, ImGuiWindowFlags_NoNav);
+    ImGuiIO& io = ImGui::GetIO();
+    const bool moved = io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f;
+    for (int i = 0; i < n; i++) {
+        ImGui::PushID(i);
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const bool sel = i == s_pick_sel;
+        if (ImGui::Selectable("##row", sel, 0, ImVec2(0, rowh - 6.0f * k))) { s_pick_sel = i; pick_finish(i); }
+        if (ImGui::IsItemHovered() && moved) s_pick_sel = i;
+        if (sel && s_pick_scroll) ImGui::SetScrollHereY(0.5f);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const bool isnew = i == s_pick_new;
+        dl->AddText(ImVec2(p.x + 10.0f * k, p.y + 4.0f * k), isnew ? IM_COL32(140, 230, 140, 255) : IM_COL32(255, 255, 255, 255), s_pick_name[i].c_str());
+        dl->AddText(ImVec2(p.x + 10.0f * k, p.y + 4.0f * k + ImGui::GetTextLineHeight() + 2.0f * k), IM_COL32(170, 170, 170, 255), s_pick_info[i].c_str());
+        ImGui::PopID();
+    }
+    s_pick_scroll = false;
+    ImGui::EndChild();
+    ImGui::Separator();
+    ImGui::TextDisabled("Up/Down: choose     Cross / Enter / click: confirm     Circle / Esc: cancel");
+    ImGui::End();
+}
 
 void script_step()
 {
@@ -1225,7 +1471,7 @@ void script_step()
     const std::string c = s_script.front().cmd;
     s_script.erase(s_script.begin());
     fprintf(stderr, "[overlay] script: %s\n", c.c_str());
-    if (c == "open") { set_open(true); return; }
+    if (c == "open") { if (!s_pick_on.load()) set_open(true); return; }
     if (!s_open.load()) { fprintf(stderr, "[overlay] script: page not open, '%s' ignored\n", c.c_str()); return; }
     if (c == "close") set_open(false);
     else if (!c.compare(0, 4, "tab=")) { s_tab = std::max(0, std::min(NTABS - 1, atoi(c.c_str() + 4))); s_sel = 0; }
@@ -1249,7 +1495,7 @@ void overlay_render(void* devp, void* queuep, void* listp, uint64_t rtv, unsigne
 {
     script_step();
     /* the auto-open of an unattended run */
-    if (s_auto_at >= 0 && !s_open.load()) {
+    if (s_auto_at >= 0 && !s_open.load() && !s_pick_on.load()) {
         const double t = now_s();
         if (!s_t_first) s_t_first = t;
         if (t - s_t_first >= s_auto_at) {
@@ -1260,7 +1506,10 @@ void overlay_render(void* devp, void* queuep, void* listp, uint64_t rtv, unsigne
     }
     const int cm = s_fps_mode;
     if (cm) fps_note(now_s());
-    if (!s_open.load() && !cm) return;
+    const bool un = update_notice_on(now_s());
+    const bool vt = version_tag_on();
+    const bool pk = s_pick_on.load();
+    if (!s_open.load() && !cm && !un && !vt && !pk) return;
     if (!ensure_ready(devp, queuep, frames, w, h)) return;
     ImGuiIO& io = ImGui::GetIO();
     const float k = std::max(0.75f, std::min(3.0f, (float)h / 1080.0f));
@@ -1289,15 +1538,20 @@ void overlay_render(void* devp, void* queuep, void* listp, uint64_t rtv, unsigne
         case 4: controls_capture_event((int)e.a); break;
         }
     }
-    if (s_open.load()) pad_actions(now_s());
-    const bool open = s_open.load();     /* may have been closed by an action above */
-    if (!open && !cm) return;
+    if (s_pick_on.load()) { pick_pad(now_s()); pick_script(now_s()); }
+    else if (s_open.load()) pad_actions(now_s());
+    const bool open = s_open.load() && !s_pick_on.load();     /* may have been closed by an action above */
+    const bool pkd = s_pick_on.load();
+    if (!open && !cm && !un && !vt && !pkd) return;
 
     ID3D12GraphicsCommandList* list = (ID3D12GraphicsCommandList*)listp;
     ImGui_ImplDX12_NewFrame();
     ImGui::NewFrame();
     if (open) build_page((float)w, (float)h, k);
+    if (pkd) { build_picker((float)w, (float)h, k); s_pick_drawn.store(GetTickCount64()); }
     if (cm) fps_draw((float)w, k);
+    if (un && !open && !pkd) update_notice_draw((float)h, k);
+    if (vt && !open && !pkd) version_tag_draw((float)w, (float)h, k);
     ImGui::Render();
     D3D12_CPU_DESCRIPTOR_HANDLE rt; rt.ptr = (SIZE_T)rtv;
     list->OMSetRenderTargets(1, &rt, FALSE, NULL);
@@ -1317,6 +1571,13 @@ extern "C" void tod_overlay_pad_feed(uint32_t real_buttons)
     s_pad.store(real_buttons);
     static ULONGLONG since;
     static bool fired;
+    if (s_pick_hold && !s_pick_on.load()) {      /* the picker just closed: the game stays blind until the buttons are up */
+        if ((real_buttons & 0xFFFF) == 0 || GetTickCount64() - s_pick_hold_t0 > 1500) {
+            s_pick_hold = false;
+            g_cellPad_input_block = s_open.load() ? 1 : 0;
+        }
+    }
+    if (s_pick_on.load()) { since = 0; fired = false; return; }
     if (s_open.load()) { since = 0; fired = false; return; }
     if (!(real_buttons & CELL_PAD_CTRL_SELECT)) { since = 0; fired = false; return; }
     const ULONGLONG now = GetTickCount64();
@@ -1328,7 +1589,7 @@ extern "C" void tod_overlay_pad_feed(uint32_t real_buttons)
     }
 }
 
-extern "C" int tod_overlay_open(void) { return s_open.load() ? 1 : 0; }
+extern "C" int tod_overlay_open(void) { return (s_open.load() || s_pick_on.load()) ? 1 : 0; }
 
 extern "C" void tod_overlay_init(void)
 {
@@ -1354,5 +1615,6 @@ extern "C" void tod_overlay_init(void)
     o.message = overlay_message;
     o.render = overlay_render;
     rsx_d3d12_set_overlay(&o);
+    { const char* sp = getenv("TOD_SAVE_PICKER"); if (!(sp && sp[0] == '0')) cellSaveData_set_pick_hook(pick_hook); }
     fprintf(stderr, "[overlay] settings page: F1 or SELECT held 2 s\n");
 }

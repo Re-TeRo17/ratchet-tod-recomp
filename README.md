@@ -8,7 +8,7 @@ Direct3D 12, up to 4K and 60 fps.
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-blue)
 ![Renderer](https://img.shields.io/badge/renderer-Direct3D%2012-green)
-![Version](https://img.shields.io/badge/version-1.0-orange)
+![Version](https://img.shields.io/badge/version-1.1-orange)
 ![Game](https://img.shields.io/badge/game-BCES00052%20(EU)-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-yellow)
 
@@ -35,8 +35,11 @@ The game's PowerPC (PPU) and SPU code is translated to C/C++ ahead of time and b
 executable, with the PS3's system libraries replaced by native implementations and the RSX graphics
 by Direct3D 12. There is no emulation at run time.
 
-**Version 1.0 is the first public release** (2 November 2026; development started on 20 October 2026). It is playable from the first planet onwards, but it is
-not finished: see [Status](#status) and [Known issues](#known-issues) before you start.
+**Version 1.1 is out** (4 November 2026): a save slot list, the voices that were missing in some
+levels, less stutter and a faster renderer. See the [changelog](CHANGELOG.md). Version 1.0 was the
+first public release (2 November 2026; development started on 20 October 2026). The game is
+playable from the first planet onwards, but it is not finished: see [Status](#status) and
+[Known issues](#known-issues) before you start.
 
 **Nothing of the game is in this download.** You need your own copy of the game (the disc). The
 installer takes it from there.
@@ -49,6 +52,10 @@ installer takes it from there.
   The game renders its 3D scene at 960x704 and stretches it afterwards; in 1.0 that stretch is
   undone, so the scene is sharp at 4K instead of being enlarged by a third in width.
 - **Character ground shadows are back**, with reworked shadow bias.
+- **New in 1.1: pick your save slot.** Saving and loading show the game's own slot list, so you
+  choose which save to load, overwrite or create.
+- **New in 1.1: the missing voices are back.** Dialogue and ambient sound that some levels stream
+  from separate files now play.
 - **A 60 fps target** (the original runs at 30 fps in many places), helped by native fast paths for
   the game's animation and collision code. On a Ryzen 5 3600 + RTX 3070 at 4K with MSAA x8,
   Cobalia holds 60 fps, Pirate Base went from about 52 to 58, the Imperial Fight Fest arena from
@@ -95,6 +102,18 @@ installer takes it from there.
 <sub>Captured at 3840x2160 internal 4K (RSX_SCALE=3), MSAA x8, 16x anisotropic filtering, then
 downscaled and saved as JPEG for this page.</sub>
 
+### Videos
+
+<table>
+  <tr>
+    <td width="50%"><a href="https://www.youtube.com/watch?v=9Zxq7EdYPfs"><img src="https://img.youtube.com/vi/9Zxq7EdYPfs/hqdefault.jpg" alt="Ratchet & Clank Tools of Destruction on PC with ray tracing in 4K (video)"></a><br><sub><b>4K with ray tracing</b> - RTX 5080 + Ryzen 7 9800X3D, by ANGEL4EVA</sub></td>
+    <td width="50%"><a href="https://www.youtube.com/watch?v=scb1zhBkfrg"><img src="https://img.youtube.com/vi/scb1zhBkfrg/hqdefault.jpg" alt="Ratchet & Clank Future: Tools of Destruction PC Recomp on an RTX 3070 (video)"></a><br><sub><b>On an RTX 3070</b> - by danxo</sub></td>
+  </tr>
+</table>
+
+<sub>Both videos were recorded with version 1.0. Made a video with the port? Open an issue with the
+link and it can be added here.</sub>
+
 ## Features
 
 ### Graphics
@@ -140,6 +159,9 @@ downscaled and saved as JPEG for this page.</sub>
   avoid compile stutter. About 23% fewer shader pipelines need compiling in 1.0, so the first visit
   to an area stutters less.
 - The hitch when the game autosaves is shorter (about 620 ms before, about 400 ms now).
+- New in 1.1: less stutter in busy scenes (the vertex cache no longer rebuilds in bursts), a faster
+  graphics thread (about 2.5 ms per frame in Metropolis), faster collision (about 1 ms per frame)
+  and a profile-guided build of the graphics code. Each one can be turned off in `tod.ini`.
 - The game's SPU code runs on your CPU cores, so a fast 6+ core CPU matters most.
 
 ### Audio and video
@@ -147,7 +169,12 @@ downscaled and saved as JPEG for this page.</sub>
 - Audio with a safety margin against crackle; an experimental low-latency output is optional.
   The music streaming threads now get enough priority, so the music no longer starves.
 - The output follows Windows' default audio device when it changes (optional, on by default).
+- Dialogue and ambient sound that some levels stream from separate files play since 1.1 (in 1.0
+  much of Cobalia's dialogue, for example, was silent). `TOD_LEVEL_STREAMS = 0` turns it off.
 - Cutscenes and movies play through the game's own video decoder.
+- **Skip a movie:** hold **Start** on the pad (or **Enter**, **Esc** or **Space** on the keyboard) for
+  2 seconds while a pre-rendered movie plays. This works for the video cutscenes (the ones the PS3
+  streams from disc), not for the scenes rendered by the game engine. `TOD_FMV_SKIP = 0` turns it off.
 
 ### Input
 
@@ -157,6 +184,8 @@ downscaled and saved as JPEG for this page.</sub>
 - Keyboard and mouse: every key is rebindable in F1 > Controls (written to `tod.ini` as `KEY_*`),
   including keys for the camera (the right stick), unbound by default; the experimental mouse camera
   below is the other way to steer it. See [Controls](#controls).
+- **Xbox impulse triggers** (1.1): on an Xbox One / Series controller the motor in the right trigger
+  kicks at every shot. On by default; F1 > System > Xbox impulse triggers (`TOD_XB_TRIGGERS`).
 - **DualSense adaptive triggers**: the right trigger follows the equipped weapon (a click for single
   shots, a hard pull for heavy weapons, a rattle for automatic fire, a steady drag for the
   flamethrower and the beams) with a kick at every shot, and goes slack in menus, in pause, in
@@ -182,6 +211,9 @@ set the value, then restart the game (the mouse camera also from F1 > Controls, 
 
 ### Saves, language and installation
 
+- **Save slot list (1.1):** saving and loading show the game's slot list, so you choose the slot.
+  `TOD_SAVE_PICKER = 0` turns the list off: then loading picks your newest save and a manual save
+  makes a new slot.
 - Saves are kept next to the game, in `gamedata\dev_hdd0\home\00000001\savedata`, and are written by the game's own save code. F1 > System > **Saves folder** opens the folder; `PS3_SAVEDATA_ROOT` in `tod.ini` moves it. One `BCES00052_SAVE_<n>` folder per save, the same layout RPCS3 uses, so copying saves between the two should work (not tested yet).
 - The game language (text, voices, subtitles) can be changed from the settings page.
 - `Install.bat` / `tod_setup.exe` installs from a decrypted `.iso` or a disc folder; `Play.bat`
@@ -229,7 +261,7 @@ an encrypted image, the installer tells you so and refuses it.
 
 ## Installing
 
-1. Download `tod-recomp-1.0-win64.zip` from the
+1. Download `tod-recomp-1.1-win64.zip` from the
    [Releases](https://github.com/Re-TeRo17/ratchet-tod-recomp/releases) page and unzip it
    anywhere you like **except** `Program Files` (the game writes its saves and shader cache next to
    `tod.exe`). About 24 GB must be free on that drive.
@@ -248,6 +280,24 @@ public if you want to check or build it yourself.
 The installer can be run again at any time (it replaces only the game files it installed). With the
 game already installed, it can also just change the language.
 
+**Updating from an older version:**
+
+1. Close the game.
+2. Open the 1.1 zip. Inside there is a folder `tod-recomp-1.1`: copy **everything inside it** into
+   your game folder (the one with `tod.exe`). When Windows asks, choose **Replace the files in the
+   destination**.
+3. Start the game with `Play.bat` as usual.
+
+You do **not** need to run `Install.bat` again: the installed game (`game\`, `elf\`) stays as it is.
+Your settings (`tod.ini`), your saves (`gamedata\`) and your shader cache (`cache\`) are kept,
+because the download holds `tod.default.ini` instead of `tod.ini` and has no saves or cache in it.
+
+The game tells you on the title screen and
+in F1 > System > Updates when a newer version is out (`TOD_UPDATE_CHECK = 0` turns the check off;
+nothing is downloaded by itself). To keep the installed game (`game\disc`) on another drive: close the game, move the
+`game\disc` folder there and write its new path in `tod.ini`, for example
+`PS3_VFS_ROOT = D:\Games\ToD\disc`.
+
 Command-line equivalent: `tod_setup.exe --install --base <folder> <iso or disc folder>` (and
 `tod_setup.exe --check <file>` to see what the installer makes of a file).
 
@@ -255,7 +305,8 @@ Command-line equivalent: `tod_setup.exe --install --base <folder> <iso or disc f
 
 ```
 tod.exe, SDL2.dll, z.dll   the port (released with this download)
-tod.ini                    your settings (also written by the F1 menu)
+tod.default.ini            the default settings (from the download)
+tod.ini                    your settings, made from tod.default.ini at the first start (also written by F1)
 game\disc\                 a copy of your disc (PS3_GAME, PS3_DISC.SFB)   <- from your disc
 elf\EBOOT.ELF              the decrypted game executable                  <- from your disc
 cache\                     shader cache, built by the game while you play
@@ -292,6 +343,11 @@ borderless window, VSync on, 60 fps target, English.
 | `TOD_PROMPTS` | Button icons: `auto` (follows the last used device), `ps3`, `ps4`, `ps5`, `xbox`, `switch`, `keyboard`. |
 | `PS3_LANG` | Game language, see below. |
 | `AUDIO_LATENCY_MS`, `AUDIO_LOWLAT` | Audio safety margin (default 32 ms) and the experimental low-latency output (default off, the stable choice). |
+| `TOD_SAVE_PICKER` | 1.1: the save slot list when saving and loading (on by default; 0 = off). |
+| `TOD_LEVEL_STREAMS` | 1.1: the dialogue and ambient sound some levels stream from separate files (on by default; 0 = off). |
+| `RSX_VCKEY_NODEF`, `RSX_TEXMASK_MEMO`, `RSX_FPSCAN_MEMO`, `TOD_COLL_HAND` | 1.1 speed-ups, all on by default. If something looks wrong on your PC, set one to 0 at a time and tell me which one helped. |
+| `TOD_UPDATE_CHECK`, `TOD_VERSION_TAG` | 1.1: check for a newer version at start, and the version shown on the title screen (both on; 0 = off). |
+| `PS3_VFS_ROOT` | Where the installed game is, if you moved the `game\disc` folder to another drive (for example `D:\Games\ToD\disc`). Empty = `game\disc` next to `tod.exe`. |
 
 ### Language
 
@@ -346,7 +402,7 @@ row, then press the new key), and keys for the camera (the right stick) can be a
 
 ## Known issues
 
-Version 1.0 is playable from the first planet onwards, but it is a first release and a few rough edges remain.
+Version 1.1 is playable from the first planet onwards, but a few rough edges remain.
 Everything below is on the list for the next updates. If you run into something that is not here,
 please [report it](#reporting-bugs).
 
@@ -367,14 +423,16 @@ please [report it](#reporting-bugs).
   appear in some scenes. (Small plants and crates casting no shadow is how the PS3 original looks
   too.)
 - **Apogee holograms:** the platforms and lasers that vanished against the sky are fixed in 1.0. If
-  you still find one, please tell us where.
+  you still find one, please tell me where.
 - **Very long sessions:** a rare freeze has been reported after many hours of play. Saving now and
   then is a good habit.
 - **Experimental options**, off by default: ultrawide (`TOD_ASPECT`: the 3D view widens, while the
   HUD and menus are stretched and cutscenes stay 16:9) and the mouse camera (`TOD_MOUSE`: it drives
   the right stick, so its top speed is the game's Camera Speed option).
-- **Hardware not tested yet:** Intel 12th gen and newer hybrid CPUs, AMD and Intel GPUs. Reports are
-  very welcome.
+- **Freezes on some Intel 12th-14th gen CPUs:** one player reports the game freezing in the same
+  spots on an i9-13900 ([#10](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/10)). I'm
+  looking into it; the issue has things to try.
+- **Hardware not tested yet:** AMD and Intel GPUs. Reports are very welcome.
 
 The current list of reported problems is on
 [GitHub Issues](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues). Please read it before
@@ -382,7 +440,7 @@ filing a new report.
 
 ## Roadmap
 
-Version 1.0 is a starting point. What comes next, roughly in this order:
+What comes next, roughly in this order:
 
 - A rock-solid 60 fps in heavy scenes, including the Clank sections.
 - Fixes for the visual problems listed under [Known issues](#known-issues).

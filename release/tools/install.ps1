@@ -1,5 +1,5 @@
 <#
-  Ratchet & Clank: Tools of Destruction Recompiled -- installer (v1.0)
+  Ratchet & Clank: Tools of Destruction Recompiled -- installer (v1.01)
 
   Install.bat starts this. It asks for your own DECRYPTED disc (a .iso or the folder that
   holds PS3_GAME) and a game language, then calls tod_setup.exe, which checks the disc
@@ -47,7 +47,15 @@ $languages = [ordered]@{
     'Japanese'              = 'japanese'
 }
 
+# 1.01: the release ships tod.default.ini, so that unzipping an update over an older version keeps the
+# player's tod.ini. tod.ini is made from it when missing (tod.exe does the same at its start).
+function Ensure-Ini {
+    $def = Join-Path $root 'tod.default.ini'
+    if (-not (Test-Path -LiteralPath $ini) -and (Test-Path -LiteralPath $def)) { Copy-Item -LiteralPath $def -Destination $ini }
+}
+
 function Get-IniLang {
+    Ensure-Ini
     if (Test-Path -LiteralPath $ini) {
         foreach ($l in Get-Content -LiteralPath $ini) {
             if ($l -match '^\s*PS3_LANG\s*=\s*(\S+)') { return $Matches[1].ToLower() }
@@ -58,6 +66,7 @@ function Get-IniLang {
 
 # Writes PS3_LANG into tod.ini (replaces the active line, else adds one); the rest is kept.
 function Set-IniLang([string]$value) {
+    Ensure-Ini
     $lines = @()
     if (Test-Path -LiteralPath $ini) { $lines = @(Get-Content -LiteralPath $ini) }
     $done = $false
@@ -176,7 +185,7 @@ function New-Label($text, $x, $y, $w, $h) {
     $form.Controls.Add($l); return $l
 }
 
-$h = New-Label 'Ratchet & Clank: Tools of Destruction Recompiled  1.0' 16 12 608 24
+$h = New-Label 'Ratchet & Clank: Tools of Destruction Recompiled  1.01' 16 12 608 24
 $h.Font = New-Object Drawing.Font('Segoe UI', 12, [Drawing.FontStyle]::Bold)
 $null = New-Label ("Nothing of the game is included: this copies YOUR disc into this folder.`r`n" +
     "You need the European release (BCES00052, v1.00) as a DECRYPTED .iso, or the folder that holds PS3_GAME.") 16 42 608 40
@@ -191,7 +200,7 @@ $form.Controls.Add($btIso)
 $btDir = New-Object Windows.Forms.Button
 $btDir.Text = 'Folder...'; $btDir.Location = New-Object Drawing.Point(542, 110); $btDir.Size = New-Object Drawing.Size(82, 27)
 $form.Controls.Add($btDir)
-$lbCheck = New-Label '' 16 142 608 58
+$lbCheck = New-Label '' 16 140 608 66
 $lbCheck.ForeColor = [Drawing.Color]::DimGray
 
 $null = New-Label 'Game language (text, voices, subtitles; changeable later in the F1 menu):' 16 208 608 18

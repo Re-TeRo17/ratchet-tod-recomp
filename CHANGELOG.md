@@ -1,5 +1,84 @@
 # Changelog
 
+## 1.1 (4 November 2026)
+
+**Smoother, faster, and your saves finally under control.** 1.1 brings a real save slot list,
+the voices and sounds that were missing in some levels, less stutter, a faster renderer and
+a pile of fixes for starting the game. Unzip it over 1.0: your settings and saves are kept.
+
+### Bug fixes
+
+- `Play.bat` failed with a red PowerShell error and the game did not start
+  ([#5](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/5)).
+- `tod.exe` closed at once without saying why (missing game files, CPU without AVX2...): it now
+  shows a message with the reason ([#5](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/5)).
+- Voices and ambient sounds were missing in some levels
+  ([#1](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/1)).
+- Started from a shortcut or a launcher, the game said "not installed" and the saves seemed gone.
+- Unzipping a new version over the old one replaced your `tod.ini` settings.
+- With two or more saves, loading took the oldest one and a new save overwrote the first slot.
+- Short stutters in busy scenes when the vertex cache rebuilt itself in bursts.
+- The installer did not say clearly when the disc image was decrypted with the wrong key.
+
+### Saves
+
+- **Pick your save slot.** Saving and loading now show the game's slot list, so you choose
+  which save to load or overwrite, or make a new one.
+- With the list turned off (`TOD_SAVE_PICKER = 0`), loading picks your newest save and a manual
+  save makes a new slot.
+
+### Sound
+
+- **Voices and sounds that were missing are back.** Some levels stream their dialogue and
+  ambient sound from separate files that 1.0 did not read (on Cobalia, for example, a lot of
+  the dialogue was silent). They now play (`TOD_LEVEL_STREAMS`, on by default).
+
+### Performance
+
+- **Less stutter:** the vertex cache no longer rebuilds itself in bursts in busy scenes
+  (`RSX_VCKEY_NODEF`, on by default).
+- **A faster renderer:** the graphics thread now remembers texture setups and shader scans it
+  has already worked out, about 2.5 ms per frame saved in Metropolis (`RSX_TEXMASK_MEMO`,
+  `RSX_FPSCAN_MEMO`).
+- **Faster collision:** two of the hottest collision loops are now hand-written for your CPU,
+  about 1 ms per frame (`TOD_COLL_HAND`).
+- **Profile-guided build:** the graphics code is compiled with a profile recorded while playing
+  five planets, so the busiest paths run faster.
+- Every new speed-up has a switch in `tod.ini` to turn it off, in case it causes trouble on
+  your PC.
+
+### Starting the game
+
+- **`Play.bat` works again.** In 1.0 it stopped with a red PowerShell error on every Windows 10 / 11 PC
+  (an empty argument list that Windows PowerShell 5.1 refuses), so the game did not start and no log was
+  written. If the game now closes with an error right after the start, `Play.bat` says so and keeps the
+  window open.
+- **`tod.exe` explains why it cannot start** (game files missing, CPU without AVX2, ...) in a message box
+  instead of a console window that closes at once.
+- `tod.exe` finds its own folder when it is started from a shortcut or a launcher with another working
+  folder (before, it said "not installed" and the saves seemed gone).
+- **Updates keep your settings:** the download now holds `tod.default.ini` instead of `tod.ini`, so
+  unzipping a new version over the old one does not replace your `tod.ini` (it is made from the default
+  at the first start). Your saves (`gamedata\`) and shader cache (`cache\`) were never in the download.
+- **Update notice:** at start the game asks GitHub whether a newer version exists and shows it on screen
+  and in F1 > System > Updates (nothing is downloaded; `TOD_UPDATE_CHECK = 0` turns it off). The version
+  is now shown in F1, in the log and in a corner of the title screen and main menu (`TOD_VERSION_TAG = 0`
+  hides it).
+- **Game files on another drive:** the installed game (the `game\disc` folder) can
+  now live on any drive. Close the game, move the `game\disc` folder where you want, then write its
+  new path in `tod.ini`, for example `PS3_VFS_ROOT = D:\Games\ToD\disc`.
+- The installer says clearly when a disc image was decrypted with the wrong key (for example the US
+  disc's key on the European disc).
+
+### Playing
+
+- **Skip a movie:** hold **Start** (or Enter, Esc or Space on the keyboard) for 2 seconds while a
+  pre-rendered movie plays and it is skipped. It applies to the video cutscenes, not to the scenes
+  the game engine renders. `TOD_FMV_SKIP = 0` in `tod.ini` turns it off. (It was already in 1.0,
+  but nobody was told.)
+- **Xbox impulse triggers:** on an Xbox One / Series controller the motors in the triggers now
+  react to your weapon (`TOD_XB_TRIGGERS`, on by default, also in F1; not tested on many pads yet).
+
 ## 1.0 (first public release, 2 November 2026)
 
 Development started on 20 October 2026; this is the first version published.

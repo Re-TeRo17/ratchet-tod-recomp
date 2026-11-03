@@ -25,6 +25,11 @@
  *   TOD_DS_FIRE_R2=1|0           DualSense: the game's R1 (fire) is the right trigger, the game's R2 the
  *                                right bumper -- the trigger with the motor behind it fires. The button
  *                                prompts still show R1 for fire (the pad layer only swaps the two).
+ *   TOD_XB_TRIGGERS=1|0          1.01: on an Xbox One / Series controller (motors in the triggers, "impulse
+ *                                triggers"), the right trigger kicks at every shot, as hard and as long as the
+ *                                weapon's DualSense kick (automatic weapons: a short tap per shot = a buzz).
+ *                                Strength: TOD_DS_TRIGGER_STRENGTH. Needs a controller and driver path where
+ *                                SDL can reach the trigger motors (Xbox Wireless / USB; not plain XInput).
  * Diagnostics: TOD_DS_LOG=1 evaluates and logs ("[ds] ...") with no DualSense too (the effect goes nowhere);
  * TOD_DS_WATCH=1 logs changes of the state words; the cheat "dsprobe=<n>" (tod_cheat.cpp) lists where the
  * hero keeps the value <n>.
@@ -49,6 +54,8 @@ int  cellPad_host_ds_present(uint32_t port);                                 /* 
 void cellPad_host_ds_triggers(uint32_t port, const uint8_t* r2, const uint8_t* l2);
 void cellPad_host_ds_fire_on_r2(int on);
 void cellPad_host_ds_r2_threshold(int raw255);
+int  cellPad_host_trig_rumble_present(uint32_t port);                        /* 1.01: Xbox impulse triggers */
+void cellPad_host_trig_rumble(uint32_t port, uint16_t left, uint16_t right, uint32_t ms);
 }
 
 namespace {
@@ -280,7 +287,7 @@ extern "C" void tod_ds_poll(int ui_open)
     if (now < next) return;
     next = now + 8;
 
-    static bool trig_on = true, fire_r2 = true, force_log = false;
+    static bool trig_on = true, fire_r2 = true, force_log = false, xb_on = true;
     static int pct = 100;
     if (now >= cfg_next) {   /* the F1 page changes these live */
         cfg_next = now + 250;
@@ -289,6 +296,7 @@ extern "C" void tod_ds_poll(int ui_open)
         pct = env_int("TOD_DS_TRIGGER_STRENGTH", 100);
         pct = pct < 10 ? 10 : pct > 100 ? 100 : pct;
         force_log = env_int("TOD_DS_LOG", 0) != 0;
+        xb_on = env_int("TOD_XB_TRIGGERS", 1) != 0;
         cellPad_host_ds_fire_on_r2(fire_r2);
     }
     static bool was_present = false;
@@ -298,7 +306,13 @@ extern "C" void tod_ds_poll(int ui_open)
         fprintf(stderr, "[ds] DualSense %s on port 0 (triggers %s, fire on %s, strength %d%%)\n", present ? "connected" : "gone",
                 trig_on ? "on" : "off", fire_r2 ? "R2" : "R1", pct);
     }
-    if (!present && !force_log) return;   /* no DualSense: nothing to do, nothing to read */
+    static bool xb_was = false;
+    const bool xb = xb_on && !present && cellPad_host_trig_rumble_present(0) != 0;   /* a DualSense keeps its own effects */
+    if (xb != xb_was) {
+        xb_was = xb;
+        fprintf(stderr, "[ds] trigger motors (Xbox impulse triggers) %s on port 0\n", xb ? "found" : "gone");
+    }
+    if (!present && !xb && !force_log) return;   /* no DualSense, no trigger motors: nothing to do, nothing to read */
 
     /* What the trigger should do now. */
     State st = read_state();
@@ -329,7 +343,15 @@ extern "C" void tod_ds_poll(int ui_open)
     static ULONGLONG kick_until = 0; static int kick_prof = 0;
     if (st.play && prof != P_NONE && st.fired == st.weapon && kProf[prof].kick_amp > 0) {
         kick_until = now + (ULONGLONG)kProf[prof].kick_ms; kick_prof = prof;
+        if (xb) {   /* 1.01: the same kick on Xbox trigger motors (kick_amp is 0..8 on the DualSense scale) */
+            const uint16_t r = (uint16_t)(kProf[prof].kick_amp * 8191 * pct / 100);
+            cellPad_host_trig_rumble(0, 0, r, (uint32_t)kProf[prof].kick_ms);
+        }
         static int nk; if (nk++ < 20) fprintf(stderr, "[ds] shot (ammo %.0f -> %.0f): kick %s\n", st.fired_from, st.fired_to, kProf[prof].name);
+    }
+    if (xb && st.play && prof != P_NONE && st.fired == st.weapon && kProf[prof].kick_amp == 0) {
+        /* the automatic weapons (a DualSense buzz while held, no kick): a short light tap per shot */
+        cellPad_host_trig_rumble(0, 0, (uint16_t)(4 * 8191 * pct / 100), 45);
     }
 
     uint8_t blk[11];
