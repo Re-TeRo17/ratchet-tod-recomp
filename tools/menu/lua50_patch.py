@@ -292,6 +292,11 @@ def patch_opthandler(f):
     return True
 
 
+def pad_fill(n):
+    """The IGHW tools fill section alignment gaps with the text PAD0PAD1PAD2... (restarting at each gap)."""
+    return b"".join(b"PAD%X" % (k & 15) for k in range((n + 3) // 4))[:n]
+
+
 def rebuild_container(d, chunk_idx, new_chunk):
     """Replace chunk `chunk_idx` of the script section; return the new file bytes."""
     si, sec, n, offs, first = split_chunks(d)
@@ -307,7 +312,7 @@ def rebuild_container(d, chunk_idx, new_chunk):
     nxt_old = secs[si + 1][1]
     new_nxt = (sec_off + new_size + 0x7F) & ~0x7F
     shift = new_nxt - nxt_old
-    out = bytearray(d[:sec_off]) + body + bytes(new_nxt - sec_off - new_size) + d[nxt_old:]
+    out = bytearray(d[:sec_off]) + body + pad_fill(new_nxt - sec_off - new_size) + d[nxt_old:]
     for i in range(len(secs)):                     # section table
         base = 0x20 + 16 * i
         if i == si:
@@ -321,7 +326,31 @@ def rebuild_container(d, chunk_idx, new_chunk):
         v = struct.unpack_from(">I", out, lo + 4)[0]
         if any(v == s[1] for s in secs):
             struct.pack_into(">I", out, lo + 4, v + shift)
+    # File footer: the very last u32 is the offset of the 2nd word of the 0x20800 section
+    # (= header total size - 4). It was left stale (old value) and the loader reads the
+    # fixup table through it -> frontend rendered black. Always recompute it.
+    if last[0] == 0x20800 and struct.unpack_from(">I", d, len(d) - 4)[0] == last[1] + 4:
+        struct.pack_into(">I", out, len(out) - 4, last[1] + shift + 4)
     return bytes(out)
+
+
+def verify_container(orig, new):
+    """Structural checks of a patched IGHW against the original; returns a list of problems."""
+    bad = []
+    so, sn = sections(orig), sections(new)
+    if len(so) != len(sn): bad.append("section count")
+    if struct.unpack_from(">I", new, 16)[0] != sn[-1][1] + sn[-1][3]: bad.append("hdr total size")
+    if struct.unpack_from(">I", new, len(new) - 4)[0] != sn[-1][1] + 4: bad.append("footer stale")
+    for a, b in zip(so, sn):
+        if a[0] != b[0]: bad.append("id %x" % a[0])
+        if b[1] % 0x80: bad.append("unaligned %x" % b[0])
+    si = find_script(orig)[0]
+    for i, (a, b) in enumerate(zip(so, sn)):
+        if i != si and orig[a[1]:a[1] + a[3]] != new[b[1]:b[1] + b[3]] and a[0] != 0x20800:
+            bad.append("section %x content changed" % a[0])
+    if new[sn[-2][1]:sn[-2][1] + sn[-2][3]] != orig[so[-2][1]:so[-2][1] + so[-2][3]]: bad.append("0x5200 changed")
+    if sn[-1][1] != sn[-2][1] + 0x200 and False: pass
+    return bad
 
 
 def patch_file(src, dst):
@@ -332,6 +361,8 @@ def patch_file(src, dst):
     assert p == len(ch) and dump(f) == ch, "round trip failed"
     patch_opthandler(f)
     out = rebuild_container(d, 0, dump(f))
+    bad = verify_container(d, out)
+    assert not bad, bad
     open(dst, "wb").write(out)
     return len(d), len(out)
 

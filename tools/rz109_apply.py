@@ -79,8 +79,10 @@ static inline __attribute__((always_inline)) __m128 rz109_ld(u128 a) { return _m
 static inline __attribute__((always_inline)) u128 rz109_fin(__m128 rf, int op, u128 a, u128 b, u128 c) {
     __m128i r = _mm_castps_si128(rf);
     const __m128i t = _mm_and_si128(r, _mm_set1_epi32(0x7FFFFFFF));
-    if (__builtin_expect(_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpgt_epi32(t, _mm_set1_epi32(0x7F7FFFFE)))) != 0, 0))
-        return rz109_redo(op, a, b, c);
+    if (__builtin_expect(_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpgt_epi32(t, _mm_set1_epi32(0x7F7FFFFE)))) != 0, 0)) {
+        u128 h_; _mm_storeu_si128((__m128i*)h_._u32, r);
+        return spu__rz_redo_lanes(op, a, b, c, h_);          /* rissa128: only the out-of-range lanes, no MXCSR switch */
+    }
     r = _mm_andnot_si128(_mm_cmpeq_epi32(t, _mm_setzero_si128()), r);      /* -0 -> +0 */
     u128 v; _mm_storeu_si128((__m128i*)v._u32, r); return v;
 }

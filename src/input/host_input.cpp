@@ -455,6 +455,8 @@ int poll(int focused, uint16_t* btn, uint8_t* rx, uint8_t* ry)
 
 extern "C" void tod_bot_init(void);
 extern "C" int tod_bot_apply(CellPadHostInput*);
+extern "C" void tod_autopilot_init(void);
+extern "C" int tod_autopilot_apply(CellPadHostInput*);   /* TOD_AUTOPILOT (tod_autopilot.cpp) */
 extern "C" void tod_cheat_init(void);
 extern "C" void tod_cheat_poll(int focused);
 extern "C" void tod_ds_poll(int ui_open);   /* tod_dualsense.cpp: DualSense triggers / speaker, no-op without a DualSense */
@@ -499,7 +501,7 @@ int host_input(void*, int focused, CellPadHostInput* out)
     if (mrx != 128 || mry != 128) { out->rx = mrx; out->ry = mry; }   /* the mouse, only while it moves (or just did) */
     out->l2 = (b & CELL_PAD_CTRL_L2) ? 255 : 0;
     out->r2 = (b & CELL_PAD_CTRL_R2) ? 255 : 0;
-    const int botdrv = tod_bot_apply(out);   /* TOD_BOT: waypoint bot (tod_bot.cpp) */
+    const int botdrv = tod_bot_apply(out) | tod_autopilot_apply(out);   /* TOD_BOT: waypoint bot (tod_bot.cpp); TOD_AUTOPILOT: tod_autopilot.cpp */
     if (kb_log) {   /* TOD_KEYS_LOG=1 / TOD_KEY_FAKE: what the bindings gave, at each change */
         static uint64_t was = ~0ull;
         const uint64_t now = (uint64_t)b | ((uint64_t)kls << 16) | ((uint64_t)krs << 24);
@@ -531,6 +533,7 @@ extern "C" void tod_input_init(void)
     kb::init();
     if (const char* s = getenv("TOD_INPUT_SCRIPT")) parse_script(s);
     tod_bot_init();
+    tod_autopilot_init();
     tod_cheat_init();
     cellPad_set_host_input(host_input, nullptr);
 }

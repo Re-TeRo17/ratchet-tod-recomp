@@ -8,7 +8,7 @@ Direct3D 12, up to 4K and 60 fps.
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-blue)
 ![Renderer](https://img.shields.io/badge/renderer-Direct3D%2012-green)
-![Version](https://img.shields.io/badge/version-1.1-orange)
+![Version](https://img.shields.io/badge/version-1.2.0-orange)
 ![Game](https://img.shields.io/badge/game-BCES00052%20(EU)-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-yellow)
 
@@ -35,8 +35,10 @@ The game's PowerPC (PPU) and SPU code is translated to C/C++ ahead of time and b
 executable, with the PS3's system libraries replaced by native implementations and the RSX graphics
 by Direct3D 12. There is no emulation at run time.
 
-**Version 1.1 is out** (4 November 2026): a save slot list, the voices that were missing in some
-levels, less stutter and a faster renderer. See the [changelog](CHANGELOG.md). Version 1.0 was the
+**Version 1.2.0 is out** (7 November 2026): no more freezes on Intel hybrid CPUs, a multi-threaded
+renderer, less video memory and shaders built before you play. See the [changelog](CHANGELOG.md).
+Thank you to the project's [supporters](#supporters)!
+Version 1.1 (4 November 2026) added a save slot list and the missing level voices. Version 1.0 was the
 first public release (2 November 2026; development started on 20 October 2026). The game is
 playable from the first planet onwards, but it is not finished: see [Status](#status) and
 [Known issues](#known-issues) before you start.
@@ -52,15 +54,21 @@ installer takes it from there.
   The game renders its 3D scene at 960x704 and stretches it afterwards; in 1.0 that stretch is
   undone, so the scene is sharp at 4K instead of being enlarged by a third in width.
 - **Character ground shadows are back**, with reworked shadow bias.
+- **New in 1.2.0: much steadier frame rate.** The renderer works on several threads, the collision
+  code runs natively and video memory use is about 0.8 GB lower at 4K with MSAA x8. In a heavy fight at
+  Rykan V the average went from 47-51 to 57 fps and the seconds below 45 fps from 26-30% to 2-3%.
+- **New in 1.2.0: no stutter the first time an effect appears.** The shaders are built once, before
+  you play (about 25 s on the first start).
+- **New in 1.2.0: no more freezes on Intel 12th-14th gen CPUs** (the game runs on the P-cores), and a
+  crash report plus a detailed log to make bug reports easier.
 - **New in 1.1: pick your save slot.** Saving and loading show the game's own slot list, so you
   choose which save to load, overwrite or create.
 - **New in 1.1: the missing voices are back.** Dialogue and ambient sound that some levels stream
   from separate files now play.
-- **A 60 fps target** (the original runs at 30 fps in many places), helped by native fast paths for
-  the game's animation and collision code. On a Ryzen 5 3600 + RTX 3070 at 4K with MSAA x8,
-  Cobalia holds 60 fps, Pirate Base went from about 52 to 58, the Imperial Fight Fest arena from
-  49 to 54 and the opening of Metropolis from 24 to 31. The heaviest areas are still below 60: see
-  [Known issues](#known-issues).
+- **A 60 fps target** (the original runs at 30 fps in many places). On a Ryzen 5 3600 + RTX 3070 at
+  4K with MSAA x8, 1.2.0 averages 59 fps on Cobalia, 57-58 in fights on Rykan V and on the Apogee Space
+  Station, and 54 in the busiest fights in Metropolis (it was about 31 there in 1.0). See
+  [Performance](#performance) and [Known issues](#known-issues).
 - **Optional ray-traced ambient occlusion** on DXR 1.1 graphics cards.
 - **In-game settings page** (F1, or hold SELECT on a controller): resolution, window mode, VSync,
   FPS limit, anti-aliasing, game language, button prompts, and a **Controls** tab to rebind every
@@ -73,9 +81,9 @@ installer takes it from there.
   that it is the right disc. Nothing of the game is shipped.
 - **Game language of your choice** (text, voices and subtitles that the disc offers), and button
   prompts that follow your controller: PlayStation 3/4/5, Xbox, Switch or keyboard.
-- **Shader cache** that remembers what it has compiled, so stutter goes away after the first pass
-  through a level. About 23% fewer shader pipelines have to be compiled than before, so there is
-  less stutter on the first visit.
+- **Shaders built before you play:** the 1719 graphics pipelines the game uses are compiled once on
+  the first start (about 25 s, with a progress window) and kept in `cache\`, so new areas do not
+  stutter the first time an effect appears.
 - **Discord Rich Presence**: the planet you are on and the time played, while Discord is running.
 - **Experimental, off by default:** ultrawide (21:9 / 32:9, in `tod.ini`) and mouse camera (F1 >
   Controls); see [Experimental options](#experimental-options-off-by-default).
@@ -132,7 +140,8 @@ link and it can be added here.</sub>
   epilogue and a faithful border for lookups outside the shadow map).
 - Rendering fixes made along the way for the bloom chain (the bloom halos are fixed), shadows and fog
   (see the [changelog](CHANGELOG.md) and [Known issues](#known-issues) for what is still open).
-- A frame counter (FPS, or FPS with frame time and 1% low) that you can switch on.
+- A frame counter (FPS, or detailed: frame time, 1% low, GPU and CPU load and video memory) that you
+  can switch on.
 
 ### Performance
 
@@ -141,17 +150,20 @@ link and it can be added here.</sub>
   queries), so they run as plain native code instead of the lifted SPU version. In 1.0 the animation
   evaluator and the collision code are faster, and 17 graphics job modules use a round-toward-zero
   fast float path.
-- Reference numbers (Ryzen 5 3600 + RTX 3070, 4K, MSAA x8), before and after the 1.0 work:
+- Reference numbers for 1.2.0 (Ryzen 5 3600 + RTX 3070, 4K, MSAA x8). Each one is an automated
+  3-minute fight with all the weapons, heavier than normal play:
 
-  | Area | Before | 1.0 |
+  | Area | Average fps | Seconds at 59-60 fps |
   |---|---|---|
-  | Cobalia | 60 | 60 |
-  | Pirate Base | ~52 | ~58 |
-  | Imperial Fight Fest (arena) | ~49 | ~54 |
-  | Metropolis (opening) | ~24 | ~31 |
+  | Cobalia | 59 | 85% |
+  | Rykan V | 57-58 | 56-66% |
+  | Apogee Space Station | 57 | 60% |
+  | Metropolis (busiest fights, ~3700 draws per frame) | 54 | 44% |
 
-  The heaviest areas are limited by the CPU, so lowering the resolution helps them little; see
-  [Known issues](#known-issues).
+  For comparison, 1.0 ran the opening of Metropolis at about 31 fps. In normal play the numbers are
+  higher: a 14-minute session at Sargasso averaged 59 fps with 88% of the seconds at 59-60, and a
+  20-minute fight test at Rykan V 59 fps with 80%. Lowering the resolution helps the heaviest scenes
+  little, because they are limited by the CPU.
 - In 1.0 the graphics command list is recorded on its own thread, and the vertex cache is large
   enough for the busiest scenes (in Metropolis it used to be emptied every few frames, a hitch of
   about 35 ms each time).
@@ -162,6 +174,11 @@ link and it can be added here.</sub>
 - New in 1.1: less stutter in busy scenes (the vertex cache no longer rebuilds in bursts), a faster
   graphics thread (about 2.5 ms per frame in Metropolis), faster collision (about 1 ms per frame)
   and a profile-guided build of the graphics code. Each one can be turned off in `tod.ini`.
+- New in 1.2.0: the draws of each frame are prepared on three threads, the SPU collision jobs run on a
+  native engine, render targets share memory blocks and offscreen passes no longer get an MSAA copy,
+  frames follow the monitor's refresh, and the 1719 graphics pipelines are built before you play. See
+  the [changelog](CHANGELOG.md) for the measured numbers; `TOD_PERF_DEFAULTS=0` (environment variable)
+  goes back to the 1.1 behaviour.
 - The game's SPU code runs on your CPU cores, so a fast 6+ core CPU matters most.
 
 ### Audio and video
@@ -197,12 +214,12 @@ link and it can be added here.</sub>
 ### Experimental options (off by default)
 
 Both are switched on in `tod.ini` (next to `tod.exe`): remove the `#` at the start of the line and
-set the value, then restart the game (the mouse camera also from F1 > Controls, at once). They are new in 1.0 and not as well tested as the rest.
+set the value, then restart the game (the mouse camera also from F1 > Controls, at once). They are not as well tested as the rest.
 
 - **Ultrawide**: `TOD_ASPECT = 21:9` (or `32:9`, or `auto` to take the shape of the window). The 3D
   view widens (same vertical field of view, you see more at the sides). Set the window to the same
-  shape, e.g. `RSX_WINDOW = 3440x1440`, and use `RSX_SCALE` 2-3. Limits: the HUD and the 2D menus are
-  stretched with the image, and cutscenes stay 16:9 with bars.
+  shape, e.g. `RSX_WINDOW = 3440x1440`, and use `RSX_SCALE` 2-3. Since 1.2.0 the HUD and the 2D menus
+  stay 16:9 in the middle of the screen; cutscenes stay 16:9 with bars.
 - **Mouse camera**: `TOD_MOUSE = 1`, or F1 > Controls > Mouse camera. The mouse drives the right stick (camera and aim); left button =
   R1 (fire), right button = L1 (strafe / lock-on), middle button = Triangle (quick select), wheel =
   D-pad left/right, `Esc` = Start. `TOD_MOUSE_SENS` (default 1.0), `TOD_MOUSE_INVERT_Y` and
@@ -227,7 +244,7 @@ set the value, then restart the game (the mouse camera also from F1 > Controls, 
 | | |
 |---|---|
 | OS | Windows 10 or 11, 64-bit |
-| CPU | **AVX2 and FMA** (Intel Haswell / 4th gen Core or newer, any AMD Ryzen). Older CPUs crash at start with an "illegal instruction" error. A fast 6+ core CPU matters most: the game's SPU code runs on your CPU cores. |
+| CPU | **AVX2 and FMA** (Intel Haswell / 4th gen Core or newer, any AMD Ryzen). On older CPUs the game shows a message at start saying the CPU is not supported. A fast 6+ core CPU matters most: the game's SPU code runs on your CPU cores. |
 | GPU | Direct3D 12 (feature level 12_0). Optional ray-traced ambient occlusion needs DXR 1.1 (RTX 20 / RX 6000 or newer). 8 GB of video memory is comfortable at 1080p-1440p. |
 | RAM | 16 GB recommended |
 | Disk | About 24 GB free for the installed game files, plus a little for shader caches and saves |
@@ -235,7 +252,8 @@ set the value, then restart the game (the mouse camera also from F1 > Controls, 
 | A controller | Recommended. Any XInput or SDL2-supported pad works (Xbox, DualShock 4, DualSense, Switch Pro...). Keyboard and mouse work too: every key is rebindable in F1 > Controls, camera keys included. |
 | The game | **Your own copy of the European disc, BCES00052, version 1.00**, see below |
 
-Not tested: Intel 12th gen and newer hybrid (P/E core) CPUs, AMD GPUs and Intel GPUs. The port was
+Intel 12th gen and newer hybrid (P/E core) CPUs: since 1.2.0 the game runs on the P-cores only, which
+fixes the freezes of issue #10 (`TOD_PCORES = 0` turns it off). Not tested: AMD GPUs and Intel GPUs. The port was
 developed on a Ryzen 5 3600 with an RTX 3070. Reports from other hardware are very welcome.
 
 ## Which game files work
@@ -261,7 +279,7 @@ an encrypted image, the installer tells you so and refuses it.
 
 ## Installing
 
-1. Download `tod-recomp-1.1-win64.zip` from the
+1. Download `tod-recomp-1.2.0-win64.zip` from the
    [Releases](https://github.com/Re-TeRo17/ratchet-tod-recomp/releases) page and unzip it
    anywhere you like **except** `Program Files` (the game writes its saves and shader cache next to
    `tod.exe`). About 24 GB must be free on that drive.
@@ -284,10 +302,10 @@ game already installed, it can also just change the language.
 
 From 1.1 on, run **`Update.bat`** in the game folder: it checks GitHub, asks before doing anything,
 downloads the new version and replaces only the port's files. To update by hand instead (and to go
-from 1.0 to 1.1, since 1.0 has no `Update.bat`):
+from 1.0 to 1.2.0, since 1.0 has no `Update.bat`):
 
 1. Close the game.
-2. Open the 1.1 zip. Inside there is a folder `tod-recomp-1.1`: copy **everything inside it** into
+2. Open the 1.2.0 zip. Inside there is a folder `tod-recomp-1.2.0`: copy **everything inside it** into
    your game folder (the one with `tod.exe`). When Windows asks, choose **Replace the files in the
    destination**.
 3. Start the game with `Play.bat` as usual.
@@ -304,6 +322,28 @@ nothing is downloaded by itself). To keep the installed game (`game\disc`) on an
 
 Command-line equivalent: `tod_setup.exe --install --base <folder> <iso or disc folder>` (and
 `tod_setup.exe --check <file>` to see what the installer makes of a file).
+
+### Steam Deck / SteamOS (Proton, community guide)
+
+There is no native Linux build, but the Windows build runs through Proton. These steps come from a
+player's guide ([#18](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/18), tested on an ASUS ROG
+Ally X with SteamOS and GE-Proton 11-12); they are not official support. See also
+[#9](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/9).
+
+1. Install GE-Proton (for example with ProtonUp-Qt from Desktop Mode).
+2. Unzip the port into a folder and put your decrypted `.iso` next to `tod_setup.exe`.
+3. In Desktop Mode open Konsole in that folder and run the installer through Proton (change the
+   GE-Proton folder name and the `.iso` name to yours):
+
+   ```bash
+   cd "/home/deck/Games/tod-recomp"
+   STEAM_COMPAT_DATA_PATH="$PWD/.steam-compat-data" STEAM_COMPAT_CLIENT_INSTALL_PATH="$HOME/.steam/root" STEAM_COMPAT_APP_ID=1848820163 "$HOME/.steam/root/compatibilitytools.d/GE-Proton11-12-x86_64/proton" run "$PWD/tod_setup.exe" --install --machine --base "$PWD" "$PWD/your_game.dec.iso"
+   ```
+
+   `STEAM_COMPAT_DATA_PATH` keeps the Proton prefix inside the folder, `--base "$PWD"` installs into
+   that folder.
+4. Add `tod.exe` to Steam as a Non-Steam Game, set its compatibility tool to GE-Proton in the game's
+   Properties, and start it from Gaming Mode.
 
 ### What is installed where
 
@@ -341,7 +381,7 @@ borderless window, VSync on, 60 fps target, English.
 | `RSX_DISPLAY`, `RSX_WINDOW` | `windowed` (with a size such as `1920x1080`), `borderless`, `fullscreen`. |
 | `RSX_VSYNC` | 1 = sync to the monitor (default), 0 = off. |
 | `TOD_FPS` | A cap (30, 60, 120...) or `lock60`. Above 60 VSync is switched off by itself and the physics uses a smaller time step. 60 is what the port is tuned for. |
-| `TOD_FPS_COUNTER` | 0 = off, 1 = FPS, 2 = detailed (FPS, frame time, 1% low of the last 5 s). |
+| `TOD_FPS_COUNTER` | 0 = off, 1 = FPS, 2 = detailed (FPS, frame time, 1% low of the last 5 s, GPU and CPU load, video memory). |
 | `RT_AO`, `RT_AO_QUALITY` | Optional ray-traced ambient occlusion (DXR 1.1 GPU), off by default; quality 0 (low), 1 (medium, default) or 2 (high). |
 | `RSX_SSR` | Optional screen-space reflections, off by default (costs a lot at 4K). |
 | `TOD_PROMPTS` | Button icons: `auto` (follows the last used device), `ps3`, `ps4`, `ps5`, `xbox`, `switch`, `keyboard`. |
@@ -350,6 +390,10 @@ borderless window, VSync on, 60 fps target, English.
 | `TOD_SAVE_PICKER` | 1.1: the save slot list when saving and loading (on by default; 0 = off). |
 | `TOD_LEVEL_STREAMS` | 1.1: the dialogue and ambient sound some levels stream from separate files (on by default; 0 = off). |
 | `RSX_VCKEY_NODEF`, `RSX_TEXMASK_MEMO`, `RSX_FPSCAN_MEMO`, `TOD_COLL_HAND` | 1.1 speed-ups, all on by default. If something looks wrong on your PC, set one to 0 at a time and tell me which one helped. |
+| `TOD_PERF_DEFAULTS` | 1.2.0 speed-ups (multi-threaded renderer, native collision, video-memory savings, frame pacing), all on by default. `TOD_PERF_DEFAULTS=0` as an environment variable goes back to 1.1; each one also has its own key (`RSX_LANES`, `RSX_RT_HEAP`, `RSX_VRAM_GOV`, `RSX_PACE_VBLANK`...). |
+| `TOD_PCORES` | 1.2.0: on Intel CPUs with P-cores and E-cores the game runs on the P-cores only (on by default; 0 = off). |
+| `TOD_SHADER_PREWARM` | 1.2.0: 0 skips building the shipped pipelines before the game starts. |
+| `RSX_CROP_BARS` | 1.2.0: 8 cuts the thin black bars at the top and bottom (as on the PS3) and stretches the picture 2.3% taller (off by default). |
 | `TOD_UPDATE_CHECK`, `TOD_VERSION_TAG` | 1.1: check for a newer version at start, and the version shown on the title screen (both on; 0 = off). |
 | `PS3_VFS_ROOT` | Where the installed game is, if you moved the `game\disc` folder to another drive (for example `D:\Games\ToD\disc`). Empty = `game\disc` next to `tod.exe`. |
 
@@ -366,9 +410,11 @@ falls back to what the disc contains.)
 
 - The game was made for 30 fps in many places. `TOD_FPS = 60` runs the game at 60 fps; above 60 the
   physics step is reduced and some effects may misbehave. Please report problems you see at 60 first.
-- **Shaders are compiled the first time you see an effect and kept in `cache\`.** The first time
-  through a level you will see short stutters; later runs are much smoother. (A cache is
-  not shipped, because it would contain the game's own shaders.) Do not delete `cache\` unless
+- **Shaders are compiled before you play.** Since 1.2.0 the download includes `shaders\pipemap.bin`, a
+  list of 1719 graphics pipelines (numbers only, nothing of the game). On the first start, or after a
+  driver update, the game builds them once with a progress window (about 25 s), so new areas no longer
+  stutter the first time an effect appears. The result is kept in `cache\`. (A cache itself is not
+  shipped, because it would contain the game's own shaders.) Do not delete `cache\` unless
   asked to.
 
 ## Controls
@@ -394,33 +440,34 @@ row, then press the new key), and keys for the camera (the right stick) can be a
 |---|---|
 | Boot, menus, saving and loading | Works |
 | Playing through the planets | Works. Every level loads; the early game has been played a lot, the later planets less |
-| Frame rate | 60 fps in most places at 1080p. At 4K with MSAA x8 on an RTX 3070 / Ryzen 5 3600: Cobalia 60, Pirate Base ~58, the arena ~54, the opening of Metropolis ~31; Clank sections run at roughly 40-47 fps |
+| Frame rate | 60 fps in most places at 1080p. At 4K with MSAA x8 on an RTX 3070 / Ryzen 5 3600 (1.2.0): average 59 fps over a 14-minute session at Sargasso, 57 fps in a heavy fight at Rykan V; the busiest fights (more than about 3000 draws per frame) can drop to about 50 fps |
 | Graphics | Direct3D 12 renderer, any internal resolution, MSAA/FXAA, anisotropic filtering, optional ray-traced ambient occlusion. A Vulkan renderer exists but is experimental (`RSX_BACKEND = vulkan`) |
 | Audio and music | Works. Low-latency output is off by default for stability |
-| Cutscenes / movies | Play (the game's own video decoder). Some stutter on first view while shaders build |
+| Cutscenes / movies | Play (the game's own video decoder) |
 | Controllers | Works (Xbox, PlayStation, Switch pads); the button icons follow the pad. DualSense adaptive triggers per weapon (not yet tested on many pads) |
 | Keyboard and mouse | Works; every key rebindable in F1 > Controls. The mouse camera is experimental and off by default |
 | Save data | Works. Saves are in `gamedata\dev_hdd0\home\00000001\savedata` (F1 > System > Saves folder opens it; `PS3_SAVEDATA_ROOT` in `tod.ini` moves it), one `BCES00052_SAVE_<n>` folder per save in the layout RPCS3 uses. Copying saves to and from RPCS3 should work but is not tested yet. Not compatible with a real console (saves are not encrypted) |
 | Online / PSN features | Not available (the game has none that matter) |
 | Other regions / PSN versions | Not supported |
+| Linux / Steam Deck | No native build; the Windows build runs through Proton (see [Steam Deck / SteamOS](#steam-deck--steamos-proton-community-guide)) |
 
 ## Known issues
 
-Version 1.1 is playable from the first planet onwards, but a few rough edges remain.
+Version 1.2.0 is playable from the first planet onwards, but a few rough edges remain.
 Everything below is on the list for the next updates. If you run into something that is not here,
 please [report it](#reporting-bugs).
 
-- **The heaviest scenes do not reach 60 fps yet.** On the reference PC (Ryzen 5 3600 + RTX 3070, 4K
-  with MSAA x8) Cobalia holds 60 fps, Pirate Base about 58 and the arena about 54. The opening of
-  Metropolis (about 31 fps, up from 24 before 1.0) and parts of the Apogee Space Station (about 40)
-  are limited by the CPU, so a lower resolution helps them little. Raising them is the main goal of
-  the next updates.
-- **Shaders are built the first time an effect appears**, so a new area can stutter briefly on the
-  first visit. They are kept in `cache\`, and later visits are smooth. (A cache cannot be shipped:
-  it would contain the game's own shaders.)
+- **The very busiest fights can still drop below 60 fps.** On the reference PC (Ryzen 5 3600 + RTX
+  3070, 4K with MSAA x8) most of the game holds 59-60 fps, but scenes with more than about 3000 draws
+  per frame (big fights in Metropolis, for example) can drop to about 50. They are limited by the CPU,
+  so a lower resolution helps them little.
+- **Video memory:** if other programs use a lot of the GPU's memory, Windows gives the game less, and a
+  short stutter can happen when a heavy scene starts.
+- **Weapon vendor and weapons menu:** they flicker briefly every 1.5 seconds (being worked on).
+- **Clank's rocket boost:** its smoke can appear late the first time it is used.
 - **Short pauses** on autosave (about 0.4 s, down from 0.6 s) and while a level or a cutscene loads.
 - **Audio:** an occasional short crackle, mostly while the frame rate dips or an area loads. Raising
-  `AUDIO_LATENCY_MS` in `tod.ini` (for example to 48) may help; a fix is planned for the next update.
+  `AUDIO_LATENCY_MS` in `tod.ini` (for example to 48) may help.
 - **Water:** a few surfaces can be invisible or incomplete (for example the large round pool on
   Fastoon), and underwater can show as a flat colour.
 - **Shadows:** the character ground shadows are back in 1.0, but an occasional artefact can still
@@ -428,14 +475,16 @@ please [report it](#reporting-bugs).
   too.)
 - **Apogee holograms:** the platforms and lasers that vanished against the sky are fixed in 1.0. If
   you still find one, please tell me where.
-- **Very long sessions:** a rare freeze has been reported after many hours of play. Saving now and
-  then is a good habit.
-- **Experimental options**, off by default: ultrawide (`TOD_ASPECT`: the 3D view widens, while the
-  HUD and menus are stretched and cutscenes stay 16:9) and the mouse camera (`TOD_MOUSE`: it drives
+- **Very long sessions:** a rare freeze has been reported after many hours of play. 1.2.0 fixes two
+  causes of freezes (Intel hybrid CPUs, and the character animation job getting stuck); if it still
+  happens to you, please send `log\tod.log` and `log\tod_v2_*.jsonl`. Saving now and then is a good
+  habit.
+- **CPUs without AVX2** (Intel 3rd gen and older) are not supported yet
+  ([#7](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/7),
+  [#15](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/15)).
+- **Experimental options**, off by default: ultrawide (`TOD_ASPECT`: the 3D view widens, the
+  HUD and menus stay 16:9 in the middle and cutscenes stay 16:9) and the mouse camera (`TOD_MOUSE`: it drives
   the right stick, so its top speed is the game's Camera Speed option).
-- **Freezes on some Intel 12th-14th gen CPUs:** one player reports the game freezing in the same
-  spots on an i9-13900 ([#10](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/10)). I'm
-  looking into it; the issue has things to try.
 - **Hardware not tested yet:** AMD and Intel GPUs. Reports are very welcome.
 
 The current list of reported problems is on
@@ -446,9 +495,11 @@ filing a new report.
 
 What comes next, roughly in this order:
 
-- A rock-solid 60 fps in heavy scenes, including the Clank sections.
-- Fixes for the visual problems listed under [Known issues](#known-issues).
-- An improved in-game settings menu.
+- The port's settings in the game's own Options menu (next update, 1.2.1).
+- A rock-solid 60 fps in the busiest fights too.
+- Fixes for the visual problems listed under [Known issues](#known-issues), starting with the
+  flicker in the weapon vendor screen.
+- A simpler installer, without the `.bat` files.
 - More polish, and fixes for what you report.
 
 ## Reporting bugs
@@ -459,12 +510,13 @@ bug report form. The more of this you include, the faster it can be fixed:
 1. **What happened**, what you expected, and **where** (planet / level name, what you were doing).
 2. **A screenshot or short clip** if it is visual (Windows' Win+Alt+PrtScn or Xbox Game Bar, or
    `Win+Shift+S`).
-3. **Your setup**: Windows version, CPU, GPU and driver version, RAM, the release version (1.0), and
+3. **Your setup**: Windows version, CPU, GPU and driver version, RAM, the release version (1.2.0), and
    which disc dump you used (decrypted `.iso` or folder).
 4. **Your settings**: attach `tod.ini` (resolution scale, MSAA, FPS limit, language...).
 5. **The log**: `log\tod.log` from right after the problem (before you start the game again: the
    previous run is kept as `log\tod.previous.log`). If the game crashed or froze, the last lines are
-   the most useful part.
+   the most useful part. Also attach `log\tod_v2_<date>.jsonl` (the detailed log: press **F7** in game
+   at the moment something goes wrong to mark it) and, if the game crashed, `log\tod_crash.txt`.
 
 Do **not** attach game files, disc images or saves from other people. A `gamedata\...\savedata`
 folder is fine if it is your own and the bug depends on it.
@@ -654,6 +706,12 @@ entirely optional: the port is and stays free.
 
 - Bugs and questions: [GitHub Issues](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues)
 - Downloads: [Releases](https://github.com/Re-TeRo17/ratchet-tod-recomp/releases)
+
+### Supporters
+
+A big thank you to the people who support the project on Buy Me a Coffee:
+
+- **7GP**
 
 ## A note from the developer
 

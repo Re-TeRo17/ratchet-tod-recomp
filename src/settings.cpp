@@ -36,9 +36,12 @@ int tod_settings_load(const char* argv0)
         const size_t cut = a.find_last_of("/\\");
         if (cut != std::string::npos) beside = a.substr(0, cut + 1) + "tod.ini";
     }
+    /* TOD_INI=<file>: use (and write) that file instead -- test runs must not touch the shared tod.ini */
+    const char* ov = getenv("TOD_INI");
+    if (ov && *ov) beside = ov; else ov = NULL;
     /* 1.01: the release ships tod.default.ini (an update unzipped over an older version must not replace the
      * player's tod.ini); the first start makes tod.ini from it. */
-    if (!beside.empty()) {
+    if (!ov && !beside.empty()) {
         FILE* t = fopen(beside.c_str(), "r");
         if (t) fclose(t);
         else {
@@ -55,7 +58,7 @@ int tod_settings_load(const char* argv0)
             if (in) fclose(in);
         }
     }
-    const std::string tried[2] = { beside, "tod.ini" };
+    const std::string tried[2] = { beside, ov ? std::string() : std::string("tod.ini") };
     FILE* f = NULL;
     const char* used = NULL;
     for (int i = 0; i < 2 && !f; i++)

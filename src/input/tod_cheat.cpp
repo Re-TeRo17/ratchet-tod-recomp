@@ -105,6 +105,7 @@ extern "C" uint32_t g_rsx_engine_frame;                  /* rsx_draw_engine.c: p
 extern "C" void rsx_draw_engine_trace_after(long after);  /* rsx_draw_engine.c: arm the 4-frame draw trace */
 extern "C" void rsx_draw_engine_pick_after(int x, int y, long after);
 extern "C" void tod_input_script_set(const char* s);   /* host_input.cpp: "inp=" command */
+extern "C" void tod_tp_log(const char* fmt, ...);      /* tod_logv2_host.cpp: stderr + "teleport" event */
 extern "C" void tod_ds_probe(int tag);                  /* tod_dualsense.cpp: dsprobe=<n> command */
 extern "C" PPU_THREAD_LOCAL ppu_context* g_active_ctx;
 extern "C" PPU_THREAD_LOCAL void (*g_trampoline_fn)(void*);
@@ -510,6 +511,7 @@ bool warp_cmd(const std::string& c, uint32_t h)   /* warp=x:y:z | warpe=<entity 
 struct Timed { double t; std::string c; };
 std::vector<Timed> s_timed;   /* TOD_WARP / TOD_WARP_MOBY: run once the hero is ready */
 std::vector<Timed> s_lua_timed;   /* TOD_LUA_EXEC=chunk@sec|chunk@sec : Lua chunks run once the hero is ready */
+std::mutex s_luaq_mx; std::vector<std::string> s_luaq;   /* usr123: tod_lua_enqueue (teleport menu): Lua chunks from any thread, run on the guest thread once the hero is ready */
 std::string s_lua_file;   /* TOD_LUA_FILE: whole-file chunk, run and emptied when non-empty (polled every 0.5 s) */
 
 uint32_t bolts_addr() { const uint32_t G = vm_read32(kG_slot); return gp(G) ? G + 0x41C : 0; }
@@ -727,6 +729,28 @@ extern "C" uint32_t tod_hero_object(void)
     return gp(obj) ? obj : 0;
 }
 
+/* logv2: the hero position from the get_pos record ([[0x898F40]] + (handle&0xFFFF)*0x90 + 0x30, x y z), the same record the
+ * autopilot drives with (tod_bot.cpp). 1 = ok, 0 = no hero / record not mapped. */
+/* logv2 position. uni127: was hero_handle()'s record, which stays at the spawn point (the log showed 98.0, 6.6, -150.7 all
+ * run long); now the live Ratchet entity the autopilot uses (player_ent: object vtable 0x0084A3F8, position at ent+0x30).
+ * The entity index found last is checked first, so the full table scan runs only when Ratchet's entity changes. */
+extern "C" int tod_hero_pos(float* xyz)
+{
+    static uint32_t s_last = 0xFFFFFFFFu;
+    const uint32_t T = vm_read32(kEntTab_slot);
+    if (!gp(T)) return 0;
+    const uint32_t base = vm_read32(T);
+    if (!gp(base)) return 0;
+    uint32_t ent = 0;
+    if (s_last < 0x4000) {
+        const uint32_t e = base + s_last * 384u, h = vm_read32(e + 0x64), obj = vm_read32(e + 0x40);
+        if (h && (h & 0xFFFF) == s_last && ptr_ok(obj) && vm_read32(obj) == 0x0084A3F8u) ent = e;
+    }
+    if (!ent) { uint32_t h = 0; ent = player_ent(&h); if (!ent) return 0; s_last = h & 0xFFFF; }
+    xyz[0] = rf(ent + 0x30); xyz[1] = rf(ent + 0x34); xyz[2] = rf(ent + 0x38);
+    return xyz[0] == xyz[0] && xyz[1] == xyz[1] && xyz[2] == xyz[2];   /* not NaN */
+}
+
 extern "C" void tod_cheat_init(void)
 {
     const char* e = getenv("TOD_CHEAT");
@@ -790,6 +814,113 @@ extern "C" void tod_cheat_enqueue(const char* cmds)
     s_in_has.store(true);
     if (!s_on.exchange(true)) fprintf(stderr, "[cheat] on: armed at run time (settings page), guest tid=%d\n", s_tid);
 }
+
+/* usr123: queues one Lua chunk (e.g. hero_warp(Ratchet1,Name)) for the guest thread; arms the poller. Thread-safe. */
+extern "C" void tod_lua_enqueue(const char* chunk)
+{
+    if (!chunk || !*chunk) return;
+    { std::lock_guard<std::mutex> g(s_luaq_mx); s_luaq.push_back(chunk); }
+    if (!s_on.exchange(true)) fprintf(stderr, "[cheat] on: armed at run time (teleport menu), guest tid=%d\n", s_tid);
+}
+
+/* vram124: IN-PROCESS level change that keeps the inventory: the game's own Lua set_level(LEVEL_X) (what the levels' scripts call when the
+ * ship leaves a planet), issued on the guest thread; once the loader names the target level and the hero has been ready 8 s, the
+ * optional hero_warp runs. If the level does not change within 25 s the state goes to 3 (the overlay says so; the user can use the
+ * relaunch button). State: 0 idle, 1 waiting for the call, 2 waiting for the level, 3 timed out, 4 done. */
+extern "C" int (*g_rsx_level_hook)(char* out, size_t n);
+namespace { struct LevelGo { int st = 0; std::string lua, folder, spot; double t0 = 0, t_in = 0; } s_go; std::mutex s_go_mx; }
+extern "C" void tod_level_go(const char* level_const, const char* folder, const char* spot)
+{
+    std::lock_guard<std::mutex> g(s_go_mx);
+    s_go.lua = std::string("set_level(") + level_const + ")"; s_go.folder = folder; s_go.spot = spot ? spot : "";
+    s_go.t0 = 0; s_go.t_in = 0; s_go.st = 1;
+    if (!s_on.exchange(true)) fprintf(stderr, "[cheat] on: armed at run time (level go), guest tid=%d\n", s_tid);
+}
+extern "C" int tod_level_go_state(void) { return s_go.st; }
+/* AUTOPILOT (tod_autopilot.cpp): Ratchet's live position (player_ent, ent+0x30); 0 = no Ratchet entity yet. Pad thread. */
+extern "C" int tod_cheat_player_pos(float* xyz)
+{
+    if (!s_on.load(std::memory_order_relaxed)) return 0;
+    const uint32_t pe = player_ent(nullptr);
+    if (!pe) return 0;
+    xyz[0] = rf(pe + 0x30); xyz[1] = rf(pe + 0x34); xyz[2] = rf(pe + 0x38);
+    return 1;
+}
+
+/* AUTOPILOT (auto119): the live entities for enemy detection: handle, vtable, position. Returns the count (<= max).
+ * Pad thread; reads only guest memory. The hero entity (vtable 0x0084A3F8) is skipped. */
+struct TodApEnt { uint32_t h, vt; float x, y, z; };
+extern "C" int tod_cheat_ents(TodApEnt* out, int max)
+{
+    if (!s_on.load(std::memory_order_relaxed)) return 0;
+    const uint32_t T = vm_read32(kEntTab_slot);
+    if (!gp(T)) return 0;
+    const uint32_t base = vm_read32(T), cnt = vm_read32(T + 0x10);
+    int n = 0;
+    for (uint32_t i = 0; i <= cnt && i < 0x4000 && n < max; i++) {
+        const uint32_t ent = base + i * 384u, h = vm_read32(ent + 0x64), obj = vm_read32(ent + 0x40);
+        if (!h || (h & 0xFFFF) != i || !ptr_ok(obj)) continue;
+        const uint32_t vt = vm_read32(obj);
+        if (vt == 0x0084A3F8u) continue;
+        out[n].h = h; out[n].vt = vt; out[n].x = rf(ent + 0x30); out[n].y = rf(ent + 0x34); out[n].z = rf(ent + 0x38); n++;
+    }
+    return n;
+}
+/* AUTOPILOT: Ratchet's matrix rows for the facing: o[0..3] = row0.x,row0.z,row2.x,row2.z, o[4] = row0.y, o[5] = row2.y. 1 = ok */
+extern "C" int tod_cheat_player_mat(float* o)
+{
+    if (!s_on.load(std::memory_order_relaxed)) return 0;
+    const uint32_t pe = player_ent(nullptr);
+    if (!pe) return 0;
+    o[0] = rf(pe + 0x00); o[1] = rf(pe + 0x08); o[2] = rf(pe + 0x20); o[3] = rf(pe + 0x28); o[4] = rf(pe + 0x04); o[5] = rf(pe + 0x24);
+    return 1;
+}
+
+/* AUTOPILOT (autofix8): binary dump of the player's memory for offline RE of a "grounded / floor" field (TOD_AP_HERODUMP).
+ * Record = "HREC" u32 tag, f64 t, u32 tag2(label), f32 pos[3], u32 nreg, then per region: u32 addr, u32 srcoff (offset in ent/obj that
+ * held the pointer, 0xFFFFFFFF = root), u32 kind (0 ent, 1 obj, 2 ptr-from-ent, 3 ptr-from-obj), u32 len, len bytes (big-endian as in guest memory,
+ * written as numeric u32 words in host order (little-endian file; read with struct "<I").
+ * Regions: ent 0x180, obj 0x400, <=40 pointers found in ent and <=64 in obj, 0x80 B each. 1 = ok. Pad thread, reads guest memory only. */
+extern "C" int tod_cheat_hero_dump(void* fv, double t, uint32_t label)
+{
+    FILE* f = (FILE*)fv;
+    if (!f || !s_on.load(std::memory_order_relaxed)) return 0;
+    const uint32_t pe = player_ent(nullptr);
+    if (!pe) return 0;
+    const uint32_t obj = vm_read32(pe + 0x40);
+    struct R { uint32_t a, src, kind, len; };
+    std::vector<R> rs;
+    rs.push_back({ pe, 0xFFFFFFFFu, 0, 0x180 });
+    if (ptr_ok(obj)) rs.push_back({ obj, 0x40, 1, 0x400 });
+    int ne = 0, no = 0;
+    for (uint32_t k = 0; k < 0x180 && ne < 40; k += 4) { const uint32_t v = vm_read32(pe + k); if (k != 0x40 && ptr_ok(v) && v != obj) { rs.push_back({ v, k, 2, 0x80 }); ne++; } }
+    if (ptr_ok(obj)) for (uint32_t k = 0; k < 0x400 && no < 64; k += 4) { const uint32_t v = vm_read32(obj + k); if (ptr_ok(v)) { rs.push_back({ v, k, 3, 0x80 }); no++; } }
+    const uint32_t tag = 0x43455248u, nreg = (uint32_t)rs.size();
+    const float pos[3] = { rf(pe + 0x30), rf(pe + 0x34), rf(pe + 0x38) };
+    fwrite(&tag, 4, 1, f); fwrite(&t, 8, 1, f); fwrite(&label, 4, 1, f); fwrite(pos, 4, 3, f); fwrite(&nreg, 4, 1, f);
+    for (const R& r : rs) {
+        fwrite(&r.a, 4, 1, f); fwrite(&r.src, 4, 1, f); fwrite(&r.kind, 4, 1, f); fwrite(&r.len, 4, 1, f);
+        for (uint32_t i = 0; i < r.len; i += 4) { const uint32_t w = vm_read32(r.a + i); fwrite(&w, 4, 1, f); }
+    }
+    return 1;
+}
+
+/* AUTOPILOT: a Lua chunk to run on the guest thread at the next poll once the hero is ready (hero_warp, hero_equip...). */
+static std::mutex s_ap_mx;
+static std::vector<std::string> s_ap_lua;
+static std::atomic<unsigned> s_ap_sent{0}, s_ap_done{0};
+static std::atomic<bool> s_ap_ready{false};
+extern "C" void tod_cheat_lua(const char* code)
+{
+    if (!code || !*code) return;
+    std::lock_guard<std::mutex> g(s_ap_mx);
+    s_ap_lua.push_back(code);
+    s_ap_sent++;
+}
+/* 1 when every chunk queued by tod_cheat_lua has run (the queue only drains once the hero is ready) */
+extern "C" int tod_cheat_lua_idle(void) { return s_ap_done.load() == s_ap_sent.load(); }
+/* 1 once the hero has been valid for 2 s and the guest thread can run Lua (the level is loaded and running) */
+extern "C" int tod_cheat_hero_ready(void) { return s_ap_ready.load() ? 1 : 0; }
 
 /* Arms the poller without a command (the Cheats tab does it when first shown, so the entity-scan hero source works). */
 extern "C" void tod_cheat_arm(void)
@@ -856,6 +987,30 @@ extern "C" void tod_cheat_poll(int focused)
     if (ready && guest_ok()) for (size_t i = 0; i < s_lua_timed.size();) {
         if (t >= s_lua_timed[i].t) { const std::string c = s_lua_timed[i].c; s_lua_timed.erase(s_lua_timed.begin() + i); lua_exec(c); }
         else i++;
+    }
+    if (s_go.st && s_go.st < 3 && guest_ok()) {
+        std::lock_guard<std::mutex> g(s_go_mx);
+        if (s_go.st == 1 && ready) { lua_exec(s_go.lua); s_go.t0 = t; s_go.st = 2; tod_tp_log("[teleport] in-process: %s (target '%s' warp '%s')\n", s_go.lua.c_str(), s_go.folder.c_str(), s_go.spot.c_str()); }
+        else if (s_go.st == 2) {
+            char cur[64] = {0}; if (g_rsx_level_hook) g_rsx_level_hook(cur, sizeof cur);
+            if (!_stricmp(cur, s_go.folder.c_str())) {
+                if (!s_go.t_in) { s_go.t_in = t; tod_tp_log("[teleport] level '%s' is loading (t=%.1f)\n", cur, t); }
+                if (t - s_go.t_in >= 8.0 && ready) {
+                    if (!s_go.spot.empty()) lua_exec("hero_warp(Ratchet1," + s_go.spot + ")");
+                    s_go.st = 4; tod_tp_log("[teleport] in-process done\n");
+                }
+            } else if (t - s_go.t0 > 25.0 && !s_go.t_in) { s_go.st = 3; tod_tp_log("[teleport] in-process: level did not change within 25 s ('%s')\n", cur); }
+        }
+    }
+    if (ready && guest_ok()) {
+        std::vector<std::string> q; { std::lock_guard<std::mutex> g(s_luaq_mx); q.swap(s_luaq); }
+        for (const std::string& c : q) lua_exec(c);
+    }
+    s_ap_ready.store(ready && guest_ok());
+    if (ready && guest_ok()) {   /* queued by the autopilot */
+        std::vector<std::string> q;
+        { std::lock_guard<std::mutex> g(s_ap_mx); q.swap(s_ap_lua); }
+        for (const auto& c : q) { lua_exec(c); s_ap_done++; }
     }
     if (ready && guest_ok() && !s_lua_file.empty()) {
         static double nl = 0;

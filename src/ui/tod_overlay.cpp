@@ -80,9 +80,20 @@ void cellPad_poll(void);                       /* cellPad.c: poll the host pad n
 void rsx_d3d12_engine_repaint(void);           /* rsx_d3d12_engine.c: present the last frame again (+ overlay) */
 typedef int (*cellSaveData_pick_hook_t)(int, int, const char* const*, const char* const*, int, int);
 void cellSaveData_set_pick_hook(cellSaveData_pick_hook_t fn);   /* cellSaveData.c */
+extern "C" void tod_fps_apply_live(const char* v);   /* main.cpp (usr123): the FPS limit, applied live */
+extern "C" void tod_level_go(const char* level_const, const char* folder, const char* spot);   /* vram124 */
+extern "C" int tod_level_go_state(void);
+extern "C" void tod_lua_enqueue(const char* chunk);
+extern "C" void tod_tp_log(const char* fmt, ...);   /* tod_logv2_host.cpp: stderr + "teleport" event */   /* tod_cheat.cpp (usr123): a Lua chunk for the guest thread */
+extern "C" void tod_logv2_mark(void);                 /* tod_logv2_host.cpp: F7 "mark" event in the structured log */
+extern int (*g_rsx_level_hook)(char* out, size_t n);  /* rsx_draw_engine.c: the level the loader names in guest memory */
+extern volatile double g_rsx_gpu_busy_ms_total;      /* rsx_d3d12_engine.c (usr123): cumulative GPU time of the lists (ms) */
+extern volatile int g_rsx_gpu_load_ok;
+extern int (*g_rsx_vram_hook)(unsigned long long* used, unsigned long long* budget);   /* rsx_draw_engine.c */
 extern volatile int g_rsx_display_reload;      /* rsx_draw_engine.c: the renderer re-reads its display settings */
 extern int g_rsx_aniso;                        /* rsx_d3d12_engine.c: the live anisotropy level */
 extern int g_rsx_aa;                           /* rsx_draw_engine.c: 0 off, 1 FXAA, 2/4/8 MSAA */
+extern volatile int g_rsx_aa_pending;          /* rsx_draw_engine.c: taken by the window pump, B2 drained (menu108) */
 uint32_t tod_hero_handle(void);                /* tod_cheat.cpp: 0 = no level / hero yet */
 int tod_no_level_yet(void);                    /* discord_level.cpp: 1 until the first level has loaded */
 void tod_cheat_enqueue(const char* cmds);      /* tod_cheat.cpp: thread-safe, runs on the guest main thread */
@@ -125,6 +136,7 @@ struct Row {
     int running = -1, saved = -1, pending = -1;   /* choice indices; -1: a value not in the list */
     std::string other;   /* that value */
     bool soon = false;   /* a placeholder: greyed, "coming soon" */
+    bool info = false;   /* 1.2 Credits tab: a read-only line like a placeholder, drawn in normal colour */
     int cheat = 0;       /* 1: toggle, 2: button (Cheats tab), 3: button (an action, any tab): acts at once, never in tod.ini, never "unapplied" */
     const char* cmd_on = NULL;    /* cheat commands (tod_cheat.cpp): toggle on / off, or the button's */
     const char* cmd_off = NULL;
@@ -139,8 +151,8 @@ struct Row {
     int bind = -1;
 };
 
-enum { TAB_VIDEO, TAB_SYSTEM, TAB_CHEATS, TAB_CONTROLS, TAB_SOON, NTABS };
-const char* const kTabName[NTABS] = { "Video", "System", "Cheats", "Controls", "Coming soon" };
+enum { TAB_VIDEO, TAB_SYSTEM, TAB_CHEATS, TAB_CONTROLS, TAB_SOON, TAB_CREDITS, NTABS };
+const char* const kTabName[NTABS] = { "Video", "System", "Cheats", "Controls", "Coming soon", "Credits" };
 
 std::vector<Row> s_rows;
 bool s_rows_init;
@@ -215,7 +227,7 @@ void init_rows()
           { { "1", "On" }, { "0", "Off" } }, 0, true, TAB_VIDEO });
     add({ "TOD_FPS", "FPS limit",
           "Frames-per-second cap. Above 60 VSync turns itself off and physics uses a smaller step (docs\\FRAMERATE.md). Unlimited = 1000.",
-          { { NULL, "Original" }, { "30", "30" }, { "60", "60" }, { "120", "120" }, { "1000", "Unlimited" } }, 0, false, TAB_VIDEO });
+          { { NULL, "Original" }, { "30", "30" }, { "60", "60" }, { "120", "120" }, { "1000", "Unlimited" } }, 0, true, TAB_VIDEO });
     add({ "RSX_AA", "Anti-aliasing", "FXAA softens the image slightly; MSAA is cleaner but costs a lot of memory and GPU.",
           { { NULL, "Off" }, { "fxaa", "FXAA" }, { "msaa2", "MSAA x2" }, { "msaa4", "MSAA x4" }, { "msaa8", "MSAA x8" } },
           0, true, TAB_VIDEO });
@@ -228,7 +240,7 @@ void init_rows()
     add({ "RSX_BLOOM_SCALE", "Bloom resolution", "Resolution multiplier of the bloom blur chain on top of the internal resolution. Applies at the next launch.",
           { { "1", "Standard" }, { "2", "High" }, { "4", "Very high" } }, 1, false, TAB_VIDEO });
     add({ "TOD_FPS_COUNTER", "FPS counter",
-          "Shows the frame rate in the top-right corner. Detailed adds the frame time and the 1% low (last 5 s).",
+          "Shows the frame rate in the top-right corner. Detailed adds the frame time, the 1% low (last 5 s), the GPU and CPU load and the video memory use.",
           { { "0", "Off" }, { "1", "FPS" }, { "2", "Detailed" } }, 0, true, TAB_VIDEO });
     add({ "RT_AO", "Ray-traced ambient occlusion",
           "Contact shadows in corners, under objects and around characters, traced on the GPU (needs an RTX 20 / RDNA2 or newer GPU, ~1 ms). Experimental: not re-tested on this version, can darken dark scenes.",
@@ -282,6 +294,10 @@ void init_rows()
     add({ "TOD_DS_FIRE_R2", "Fire with R2 (DualSense)",
           "DualSense: the right trigger fires and R1 does what R2 does on the PS3 pad (the on-screen prompts keep saying R1 for fire). Off: the PS3 layout.",
           { { NULL, "On" }, { "0", "Off (R1)" } }, 0, true, TAB_SYSTEM });
+    add({ "TOD_TELEPORT", "Teleport menu (F5)",
+          "EXPERIMENTAL / debug: F5 opens a list of warp points of the current level and a level switcher (the level switch restarts the game on that level). Not for normal play.",
+          { { NULL, "Off" }, { "1", "On" } }, 0, true, TAB_SYSTEM });
+    s_rows.back().experimental = true;
     add({ "TOD_XB_TRIGGERS", "Xbox impulse triggers",
           "Xbox One / Series controller: the right trigger's motor kicks at every shot, like the weapon in Ratchet's hands. Strength: Trigger strength above. Does nothing on a controller without trigger motors.",
           { { NULL, "On" }, { "0", "Off" } }, 0, true, TAB_SYSTEM });
@@ -318,6 +334,27 @@ void init_rows()
         r.soon = true;
         r.running = r.saved = r.pending = 0;
         add(r);
+    }
+    /* 1.2 Credits tab: the port's own page (never the game's credits). Supporters: one line each, added per release. */
+    {
+        const char* lines[][3] = {   /* label, description, group heading */
+            { "Ratchet & Clank: Tools of Destruction - native PC port", "A static recompilation of the PS3 game. Requires your own copy of the game.", "Recomp project" },
+            { "Developed by Re-TeRo17", "github.com/Re-TeRo17/ratchet-tod-recomp", NULL },
+            { "Fan project, not affiliated with Insomniac Games or Sony Interactive Entertainment", "All game content belongs to its owners; nothing of the game is included in this download.", NULL },
+            { "7GP", "Thank you for supporting the project!", "Supporters" },
+            { "Support the project: buymeacoffee.com/tero17", "Support goes to the development work of the port.", NULL },
+            { "ps3recomp by sp00nznet (fork by soyjxck) (MIT)", "The PS3 static recompilation runtime this port is built on.", "Thanks" },
+            { "dod3-recomp by soyjxck and contributors (MIT)", "The Drakengard 3 recompilation this port is modelled on (boot path, guest memory, Dear ImGui setup).", NULL },
+            { "RACiT by HighDrexler (MIT)", "Discord presence and DualSense trigger effect code.", NULL },
+            { "SDL2, Dear ImGui, zlib and the other libraries", "See THIRD_PARTY_NOTICES.md next to tod.exe.", NULL },
+            { "Everyone reporting issues on GitHub", "Your reports and logs make every version better.", NULL },
+        };
+        for (auto& l : lines) {
+            Row r{ NULL, l[0], l[1], { { NULL, "" } }, 0, false, TAB_CREDITS };
+            r.soon = true; r.info = true; r.group = l[2];
+            r.running = r.saved = r.pending = 0;
+            add(r);
+        }
     }
     add_controls_rows();   /* keys136 */
 }
@@ -458,8 +495,9 @@ void apply_and_save()
         r.running = r.pending;
         if (!strcmp(r.key, "RSX_ANISO")) g_rsx_aniso = v ? atoi(v) : 16;
         if (!strcmp(r.key, "TOD_FPS_COUNTER")) s_fps_mode = v ? atoi(v) : 0;
+        if (!strcmp(r.key, "TOD_FPS")) tod_fps_apply_live(v);   /* usr123: live, main.cpp */
         if (!strcmp(r.key, "RSX_AA")) {
-            g_rsx_aa = !v ? 0 : !strcmp(v, "fxaa") ? 1 : !strcmp(v, "msaa2") ? 2 : !strcmp(v, "msaa4") ? 4 : !strcmp(v, "msaa8") ? 8 : 0;
+            g_rsx_aa_pending = !v ? 0 : !strcmp(v, "fxaa") ? 1 : !strcmp(v, "msaa2") ? 2 : !strcmp(v, "msaa4") ? 4 : !strcmp(v, "msaa8") ? 8 : 0;
             display = true;
         }
         if (!strcmp(r.key, "RSX_DISPLAY") || !strcmp(r.key, "RSX_VSYNC") || !strcmp(r.key, "RSX_SCALE") ||
@@ -756,13 +794,133 @@ void set_open(bool on)
     fprintf(stderr, "[overlay] %s (input to the game %s)\n", on ? "open" : "closed", on ? "blocked" : "restored");
 }
 
-int overlay_message(void*, unsigned msg, uintptr_t wp, intptr_t lp, intptr_t* result)
+extern "C" void tod_menu_apply_key_win(const char* key, const char* v);
+
+/* ---- usr123: TELEPORT MENU (EXPERIMENTAL / debug, TOD_TELEPORT=1 or the System tab; F5) ----------------------------------
+ * Left: the 19 levels (the current one marked). Right: its warp points (tod_teleport_data.inc, from WIKI_CHEAT.md sec. 4).
+ * A warp point of the CURRENT level is a hero_warp(Ratchet1,<volume>) run live on the guest thread (tod_lua_enqueue, same path as
+ * TOD_LUA_EXEC). Another level cannot be loaded from inside a running level, so it restarts tod.exe on -level;<name> (same environment, the
+ * log keeps going, the warp runs 45 s after the start); the new process id is printed ("[teleport] relaunched pid N") and written to
+ * teleport_pid.txt (an agent holding the game lock must -Register that id). */
+#include "tod_teleport_data.inc"
+std::atomic<bool> s_tp_open{ false };
+int s_tp_sel = -1;                  /* level selected in the list (-1: the current one) */
+char s_tp_cur[64];                  /* the level the loader names (refreshed every second while open) */
+std::string s_tp_msg;
+bool tp_enabled() { const char* e = getenv("TOD_TELEPORT"); return e && e[0] == '1'; }
+void tp_set_open(bool on)
 {
+    if (s_tp_open.load() == on) return;
+    s_tp_open.store(on);
+    if (!s_open.load()) g_cellPad_input_block = on ? 1 : 0;
+    if (on) { s_tp_sel = -1; s_tp_msg.clear(); }
+    tod_tp_log("[teleport] menu %s\n", on ? "open" : "closed");
+}
+/* vram124: LEVEL_* constant of the game's Lua for a level folder name */
+void tp_relaunch(const char* level, const char* spot);
+static std::string tp_level_const(const char* folder)
+{
+    if (!_stricmp(folder, "fastoon_return")) return "LEVEL_FASTOON_II";
+    std::string s = "LEVEL_"; for (const char* p = folder; *p; p++) s += (*p == ' ') ? '_' : (char)toupper((unsigned char)*p);
+    return s;
+}
+void tp_go(const char* level, const char* spot)
+{
+    const char* e = getenv("TOD_TELEPORT_RELAUNCH");
+    if (e && e[0] == '1') { tp_relaunch(level, spot); return; }
+    tod_level_go(tp_level_const(level).c_str(), level, spot);
+    s_tp_msg = std::string("Going to ") + level + " with your inventory (loads in a few seconds)";
+}
+void tp_relaunch(const char* level, const char* spot)
+{
+    char exe[MAX_PATH]; GetModuleFileNameA(NULL, exe, MAX_PATH);
+    std::string argv = "-no_legal;-no_frontend;";
+    const char* fmv = getenv("PS3_NO_FMV"); if (fmv && fmv[0] == '1') argv += "-no_movies;";
+    argv += "-level;"; argv += level;
+    _putenv_s("PS3_ARGV", argv.c_str());
+    std::string lua = spot && *spot ? std::string("hero_warp(Ratchet1,") + spot + ")@45" : std::string();
+    _putenv_s("TOD_LUA_EXEC", lua.c_str());
+    _putenv_s("TOD_START_DELAY_MS", "1500");
+    { /* vram124: a relaunch starts with the default inventory: hand over every weapon and full ammo (the in-process travel keeps the real one) */
+      const char* tc = getenv("TOD_CHEAT"); std::string cs = tc && *tc ? tc : ""; if (cs.find("weapons") == std::string::npos) { if (!cs.empty()) cs += ","; cs += "weapons,giveammo"; }
+      _putenv_s("TOD_CHEAT", cs.c_str()); }
+    _putenv_s("TOD_OVERLAY_SCRIPT", ""); _putenv_s("TOD_OVERLAY_AUTO", "");   /* the new process must not replay this process's script (it would relaunch forever) */
+    STARTUPINFOA si = {}; si.cb = sizeof si; si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE); si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE); si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+    PROCESS_INFORMATION pi = {};
+    std::string cl = GetCommandLineA();
+    if (!CreateProcessA(exe, &cl[0], NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) { s_tp_msg = "Could not start the new process."; tod_tp_log("[teleport] CreateProcess failed %lu\n", GetLastError()); return; }
+    tod_tp_log("[teleport] relaunched pid %lu: PS3_ARGV=%s warp=%s\n", pi.dwProcessId, argv.c_str(), spot ? spot : "-");
+    { char pf[MAX_PATH]; snprintf(pf, sizeof pf, "%s", exe); if (char* sl = strrchr(pf, 92)) strcpy(sl + 1, "teleport_pid.txt"); else strcpy(pf, "teleport_pid.txt");
+      if (FILE* f = fopen(pf, "w")) { fprintf(f, "%lu\n", pi.dwProcessId); fclose(f); } }
+    fflush(stderr);
+    TerminateProcess(GetCurrentProcess(), 0);
+}
+void build_teleport(float W, float H, float k)
+{
+    static ULONGLONG last = 0;
+    const ULONGLONG nowt = GetTickCount64();
+    if (!s_tp_cur[0] || nowt - last > 1000) { last = nowt; s_tp_cur[0] = 0; if (g_rsx_level_hook) g_rsx_level_hook(s_tp_cur, sizeof s_tp_cur); }
+    int cur = -1;
+    const int nl = (int)(sizeof kTpLevels / sizeof kTpLevels[0]);
+    for (int i = 0; i < nl; i++) if (!_stricmp(kTpLevels[i].name, s_tp_cur)) cur = i;
+    if (s_tp_sel < 0) s_tp_sel = cur >= 0 ? cur : 0;
+    ImGui::SetNextWindowPos(ImVec2(W * 0.5f, H * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(760.0f * k, 640.0f * k), ImGuiCond_Appearing);
+    bool open = true;
+    if (ImGui::Begin("Teleport  -  EXPERIMENTAL / debug##tp", &open, ImGuiWindowFlags_NoCollapse)) {
+        ImGui::Text("Current level: %s", s_tp_cur[0] ? s_tp_cur : "(unknown)");
+        ImGui::TextDisabled("Click a warp point. Another level restarts the game on it. F5 / Esc closes.");
+        ImGui::Separator();
+        ImGui::BeginChild("tplv", ImVec2(250.0f * k, 0), true);
+        for (int i = 0; i < nl; i++) {
+            char lab[96]; snprintf(lab, sizeof lab, "%s%s", kTpLevels[i].name, i == cur ? "  (here)" : "");
+            if (ImGui::Selectable(lab, i == s_tp_sel)) s_tp_sel = i;
+        }
+        ImGui::EndChild();
+        ImGui::SameLine();
+        ImGui::BeginChild("tpsp", ImVec2(0, 0), true);
+        const TpLevel& L = kTpLevels[s_tp_sel];
+        ImGui::Text("%s", L.name);
+        if (s_tp_sel == cur) ImGui::TextDisabled("warp inside this level");
+        else ImGui::TextDisabled("restarts the game on this level");
+        ImGui::Separator();
+        if (ImGui::Button(s_tp_sel == cur ? "Restart this level" : "Go to level start")) tp_go(L.name, NULL);
+        ImGui::SameLine();
+        if (ImGui::Button("Restart the game on it (all weapons given)")) tp_relaunch(L.name, NULL);
+        if (tod_level_go_state() == 3) ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.3f, 1.0f), "The level did not change: use the restart button.");
+        for (int j = 0; j < 40 && L.warps[j]; j++) {
+            if (ImGui::Selectable(L.warps[j])) {
+                if (s_tp_sel == cur) {
+                    char ch[160]; snprintf(ch, sizeof ch, "hero_warp(Ratchet1,%s)", L.warps[j]);
+                    tod_lua_enqueue(ch);
+                    s_tp_msg = std::string("Warp: ") + L.warps[j];
+                    tod_tp_log("[teleport] warp %s\n", L.warps[j]);
+                } else tp_go(L.name, L.warps[j]);
+            }
+        }
+        if (!L.warps[0]) ImGui::TextDisabled("(no warp points known: ship level)");
+        ImGui::EndChild();
+        if (!s_tp_msg.empty()) ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "%s", s_tp_msg.c_str());
+    }
+    ImGui::End();
+    if (!open) tp_set_open(false);
+}
+
+static volatile HWND s_game_hwnd;   /* menu117: the window that really delivers messages to overlay_message */
+int overlay_message(void* hw, unsigned msg, uintptr_t wp, intptr_t lp, intptr_t* result)
+{
+    if (hw && !s_game_hwnd) s_game_hwnd = (HWND)hw;
+    if (msg == (WM_APP + 0x108)) { fprintf(stderr, "[menu] message received on the window thread: %s" "\n", (const char*)wp ? (const char*)wp : "?"); tod_menu_apply_key_win((const char*)wp, (const char*)lp); *result = 0; return 1; }
     if (!s_cs_init) return 0;
     const bool open = s_open.load() || s_pick_on.load();
+    const bool tp = s_tp_open.load();
     switch (msg) {
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
+        if (wp == VK_F7 && !(lp & (1 << 30))) { tod_logv2_mark(); }   /* logv2: the user marks "here" (not consumed: the game never used F7) */
+        if (wp == VK_F5 && tp_enabled() && !open) { if (!(lp & (1 << 30))) tp_set_open(!tp); *result = 0; return 1; }   /* usr123: teleport menu */
+        if (tp && !open) { if (!(lp & (1 << 30)) && wp == VK_ESCAPE) tp_set_open(false); if (wp == VK_F4 && (lp & (1 << 29))) return 0; *result = 0; return 1; }
         if (wp == VK_F1 && s_pick_on.load()) { *result = 0; return 1; }   /* the slot picker owns the input */
         if (wp == VK_F1) {
             if (!(lp & (1 << 30))) set_open(!open);
@@ -792,22 +950,22 @@ int overlay_message(void*, unsigned msg, uintptr_t wp, intptr_t lp, intptr_t* re
         *result = 0;
         return 1;
     case WM_KEYUP: case WM_SYSKEYUP: case WM_CHAR: case WM_SYSCHAR:
-        if (!open) return 0;
+        if (!open && !tp) return 0;
         *result = 0;
         return 1;
     case WM_MOUSEMOVE:
-        if (!open) return 0;
+        if (!open && !tp) return 0;
         push({ 1, (float)GET_X_LPARAM(lp), (float)GET_Y_LPARAM(lp) });
         *result = 0;
         return 1;
     case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK: case WM_LBUTTONUP:
-        if (!open) return 0;
+        if (!open && !tp) return 0;
         push({ 1, (float)GET_X_LPARAM(lp), (float)GET_Y_LPARAM(lp) });
         push({ 2, 0, msg == WM_LBUTTONUP ? 0.0f : 1.0f });
         *result = 0;
         return 1;
     case WM_RBUTTONDOWN: case WM_RBUTTONDBLCLK: case WM_RBUTTONUP:
-        if (!open) return 0;
+        if (!open && !tp) return 0;
         push({ 2, 1, msg == WM_RBUTTONUP ? 0.0f : 1.0f });
         *result = 0;
         return 1;
@@ -822,12 +980,12 @@ int overlay_message(void*, unsigned msg, uintptr_t wp, intptr_t lp, intptr_t* re
         *result = TRUE;
         return 1;
     case WM_MOUSEWHEEL:
-        if (!open) return 0;
+        if (!open && !tp) return 0;
         push({ 3, (float)GET_WHEEL_DELTA_WPARAM(wp) / (float)WHEEL_DELTA, 0 });
         *result = 0;
         return 1;
     case WM_SETCURSOR:
-        if (!open || LOWORD(lp) != HTCLIENT) return 0;
+        if ((!open && !tp) || LOWORD(lp) != HTCLIENT) return 0;
         SetCursor(LoadCursor(NULL, IDC_ARROW));
         *result = TRUE;
         return 1;
@@ -1103,7 +1261,7 @@ void build_page(float W, float H, float k)
     ImGui::Spacing();
 
     /* tabs */
-    const float tabw = 136.0f * k;
+    const float tabw = 118.0f * k;   /* 1.2: six tabs (Credits) plus the hint fit the page */
     for (int t = 0; t < NTABS; t++) {
         if (t) ImGui::SameLine();
         const bool on = t == s_tab;
@@ -1168,7 +1326,7 @@ void build_page(float W, float H, float k)
         if (hov && mouse_moved && !r.soon) s_sel = my;
         if (selected) dl->AddRectFilled(p, ImVec2(p.x + rw, p.y + rh), IM_COL32(240, 140, 25, 70), 6.0f * k);
         else if (hov && !r.soon) dl->AddRectFilled(p, ImVec2(p.x + rw, p.y + rh), IM_COL32(255, 255, 255, 18), 6.0f * k);
-        const ImU32 txt = (r.soon || grey) ? IM_COL32(120, 125, 140, 255) : IM_COL32(235, 238, 245, 255);
+        const ImU32 txt = ((r.soon && !r.info) || grey) ? IM_COL32(120, 125, 140, 255) : IM_COL32(235, 238, 245, 255);
         const float ty = p.y + (rh - ImGui::GetFontSize()) * 0.5f;
         dl->AddText(ImVec2(p.x + 14.0f * k, ty), txt, r.label);
         if (r.experimental) {
@@ -1216,7 +1374,7 @@ void build_page(float W, float H, float k)
             }
             if (ImGui::IsItemClicked(ImGuiMouseButton_Right) && r.cheat != 2 && r.cheat != 4 && r.cheat != 5 && r.ctl != 1 && r.ctl != 3) { s_sel = my; change_value(r, -1); }
             if (ImGui::IsItemClicked(ImGuiMouseButton_Right) && r.ctl == 1) { s_sel = my; controls_clear(r); }   /* unbind */
-        } else {
+        } else if (!r.info) {
             const char* t = "coming soon";
             dl->AddText(ImVec2(p.x + rw - 20.0f * k - ImGui::CalcTextSize(t).x - 40.0f * k, ty), IM_COL32(120, 125, 140, 255), t);
             if (hov) desc = r.desc;
@@ -1265,9 +1423,34 @@ double s_ts[kRing];
 float s_dt[kRing];
 unsigned s_ts_n;            /* frames recorded since the counter was switched on */
 double s_fps_next;          /* next text refresh */
-char s_fps_l[3][48];
+char s_fps_l[6][48];
 int s_fps_lines;
 int s_fps_prev_mode;
+
+/* usr123: GPU / CPU load (and video memory) next to the frame time, sampled twice a second.
+ * CPU: GetProcessTimes (kernel + user of this process) over the wall time, divided by the logical cores = the Task Manager figure.
+ * GPU: the sum of the GPU time of the submitted command lists (D3D12 timestamps, g_rsx_gpu_busy_ms_total) over the wall time;
+ *      100 = the GPU never idles (the frame is GPU-bound). VRAM: DXGI QueryVideoMemoryInfo through g_rsx_vram_hook. */
+struct LoadSample { bool have; double wall, cpu_s, gpu_ms; double cpu_pct, gpu_pct; double vram_u, vram_b; } s_load;
+void load_sample()
+{
+    LARGE_INTEGER q, f; QueryPerformanceCounter(&q); QueryPerformanceFrequency(&f);
+    const double wall = (double)q.QuadPart / (double)f.QuadPart;
+    if (s_load.have && wall - s_load.wall < 0.5) return;
+    FILETIME c, e, k, u; GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u);
+    const double cpu_s = (((double)((((unsigned long long)k.dwHighDateTime << 32) | k.dwLowDateTime)) +
+                           (double)((((unsigned long long)u.dwHighDateTime << 32) | u.dwLowDateTime))) * 1e-7);
+    const double gms = g_rsx_gpu_busy_ms_total;
+    static int ncpu = 0; if (!ncpu) { SYSTEM_INFO si; GetSystemInfo(&si); ncpu = si.dwNumberOfProcessors > 0 ? (int)si.dwNumberOfProcessors : 1; }
+    if (s_load.have) {
+        const double dw = wall - s_load.wall;
+        s_load.cpu_pct = std::min(100.0, 100.0 * (cpu_s - s_load.cpu_s) / (dw * ncpu));
+        s_load.gpu_pct = g_rsx_gpu_load_ok ? std::min(100.0, 100.0 * (gms - s_load.gpu_ms) / (dw * 1000.0)) : -1.0;
+    }
+    unsigned long long vu = 0, vb = 0;
+    if (g_rsx_vram_hook && g_rsx_vram_hook(&vu, &vb)) { s_load.vram_u = (double)vu / 1073741824.0; s_load.vram_b = (double)vb / 1073741824.0; }
+    s_load.wall = wall; s_load.cpu_s = cpu_s; s_load.gpu_ms = gms; s_load.have = true;
+}
 
 void fps_note(double t)
 {
@@ -1301,6 +1484,12 @@ void fps_note(double t)
         snprintf(s_fps_l[1], sizeof s_fps_l[1], "%.1f ms", fps > 0 ? 1000.0 / fps : 0.0);
         snprintf(s_fps_l[2], sizeof s_fps_l[2], "1%% low %.0f", low);
         s_fps_lines = 3;
+        load_sample();
+        if (s_load.gpu_pct >= 0) snprintf(s_fps_l[3], sizeof s_fps_l[3], "GPU %.0f%%", s_load.gpu_pct);
+        else snprintf(s_fps_l[3], sizeof s_fps_l[3], "GPU n/a");
+        snprintf(s_fps_l[4], sizeof s_fps_l[4], "CPU %.0f%%", s_load.cpu_pct);
+        s_fps_lines = 5;
+        if (s_load.vram_b > 0) { snprintf(s_fps_l[5], sizeof s_fps_l[5], "VRAM %.1f/%.1f GB", s_load.vram_u, s_load.vram_b); s_fps_lines = 6; }
     }
 }
 
@@ -1311,7 +1500,7 @@ void fps_draw(float W, float k)
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     const float pad = 8.0f * k, margin = 14.0f * k;
     float tw = 0, th = 0;
-    ImVec2 sz[3];
+    ImVec2 sz[6];
     for (int i = 0; i < s_fps_lines; i++) {
         sz[i] = ImGui::CalcTextSize(s_fps_l[i]);
         tw = std::max(tw, sz[i].x); th += sz[i].y;
@@ -1471,6 +1660,15 @@ void script_step()
     const std::string c = s_script.front().cmd;
     s_script.erase(s_script.begin());
     fprintf(stderr, "[overlay] script: %s\n", c.c_str());
+    if (!c.compare(0, 3, "tp=")) {   /* usr123: drive the teleport menu from TOD_OVERLAY_SCRIPT: tp=open | tp=close | tp=warp:<volume> (current level) | tp=go:<level>:<volume or -> */
+        const std::string a = c.substr(3);
+        if (a == "open") tp_set_open(true);
+        else if (a == "close") tp_set_open(false);
+        else if (!a.compare(0, 5, "warp:")) { char ch[160]; snprintf(ch, sizeof ch, "hero_warp(Ratchet1,%s)", a.c_str() + 5); tod_lua_enqueue(ch); tod_tp_log("[teleport] warp %s\n", a.c_str() + 5); }
+        else if (!a.compare(0, 4, "goin")) { const size_t k1 = a.find(':'); const size_t k2 = k1 == std::string::npos ? k1 : a.find(':', k1 + 1); const std::string lv = k1 == std::string::npos ? "" : a.substr(k1 + 1, k2 == std::string::npos ? std::string::npos : k2 - k1 - 1); const std::string sp = k2 == std::string::npos ? "" : a.substr(k2 + 1); if (!lv.empty()) tp_go(lv.c_str(), sp == "-" ? "" : sp.c_str()); }   /* vram124: tp=goin:<level>:<volume or -> in-process, keeps the inventory (TOD_TELEPORT_RELAUNCH=1 relaunches) */
+        else if (!a.compare(0, 3, "go:")) { const size_t k2 = a.find(':', 3); const std::string lv = a.substr(3, k2 == std::string::npos ? std::string::npos : k2 - 3); const std::string sp = k2 == std::string::npos ? "" : a.substr(k2 + 1); tp_relaunch(lv.c_str(), sp == "-" ? "" : sp.c_str()); }
+        return;
+    }
     if (c == "open") { if (!s_pick_on.load()) set_open(true); return; }
     if (!s_open.load()) { fprintf(stderr, "[overlay] script: page not open, '%s' ignored\n", c.c_str()); return; }
     if (c == "close") set_open(false);
@@ -1509,7 +1707,7 @@ void overlay_render(void* devp, void* queuep, void* listp, uint64_t rtv, unsigne
     const bool un = update_notice_on(now_s());
     const bool vt = version_tag_on();
     const bool pk = s_pick_on.load();
-    if (!s_open.load() && !cm && !un && !vt && !pk) return;
+    if (!s_open.load() && !cm && !un && !vt && !pk && !s_tp_open.load()) return;
     if (!ensure_ready(devp, queuep, frames, w, h)) return;
     ImGuiIO& io = ImGui::GetIO();
     const float k = std::max(0.75f, std::min(3.0f, (float)h / 1080.0f));
@@ -1542,12 +1740,14 @@ void overlay_render(void* devp, void* queuep, void* listp, uint64_t rtv, unsigne
     else if (s_open.load()) pad_actions(now_s());
     const bool open = s_open.load() && !s_pick_on.load();     /* may have been closed by an action above */
     const bool pkd = s_pick_on.load();
-    if (!open && !cm && !un && !vt && !pkd) return;
+    const bool tpo = s_tp_open.load() && !open && !pkd;
+    if (!open && !cm && !un && !vt && !pkd && !tpo) return;
 
     ID3D12GraphicsCommandList* list = (ID3D12GraphicsCommandList*)listp;
     ImGui_ImplDX12_NewFrame();
     ImGui::NewFrame();
     if (open) build_page((float)w, (float)h, k);
+    if (tpo) build_teleport((float)w, (float)h, k);
     if (pkd) { build_picker((float)w, (float)h, k); s_pick_drawn.store(GetTickCount64()); }
     if (cm) fps_draw((float)w, k);
     if (un && !open && !pkd) update_notice_draw((float)h, k);
@@ -1590,6 +1790,55 @@ extern "C" void tod_overlay_pad_feed(uint32_t real_buttons)
 }
 
 extern "C" int tod_overlay_open(void) { return (s_open.load() || s_pick_on.load()) ? 1 : 0; }
+/* menu104: the Options page of the game's own menu (src/ui/tod_settings_menu.cpp) sets RSX_AA through this: the
+ * same steps as apply_and_save() for a live row (environment, the renderer's globals, the display reload) and
+ * tod.ini. mode: 0 off, 1 fxaa, 2 msaa2, 3 msaa4, 4 msaa8. Safe from any thread (no overlay state is touched;
+ * the F1 page re-reads the environment each time it is opened). */
+extern "C" void tod_menu_apply_key_win(const char* key, const char* v)
+{
+    _putenv_s(key, v ? v : "");               /* "" removes it */
+    bool display = false;
+    if (!strcmp(key, "RSX_AA")) {
+        g_rsx_aa_pending = !v ? 0 : !strcmp(v, "fxaa") ? 1 : !strcmp(v, "msaa2") ? 2 : !strcmp(v, "msaa4") ? 4 : !strcmp(v, "msaa8") ? 8 : 0;
+        display = true;
+    }
+    if (!strcmp(key, "RSX_DISPLAY") || !strcmp(key, "RSX_VSYNC") || !strcmp(key, "RSX_SCALE") || !strcmp(key, "RSX_WINDOW")) display = true;
+    if (!strcmp(key, "TOD_FPS_COUNTER")) s_fps_mode = v ? atoi(v) : 0;
+    if (!strcmp(key, "RSX_ANISO")) g_rsx_aniso = v ? atoi(v) : 16;
+    if (!strcmp(key, "TOD_FPS")) tod_fps_apply_live(v);   /* usr123: live (the menu value wins over the start-up environment) */
+    if (display) g_rsx_display_reload = 1;
+    write_ini({ { key, v } });
+    fprintf(stderr, "[menu] %s = %s applied%s\n", key, v ? v : "(default)", "");
+}
+
+#define TOD_WM_MENU_KEY (WM_APP + 0x108)
+static BOOL CALLBACK menu_find_wnd(HWND h, LPARAM lp)
+{
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    char cls[64] = {};
+    GetClassNameA(h, cls, sizeof cls);
+    /* menu111: only the renderer's own window (another visible window of this process may come first in the Z order) */
+    if (pid == GetCurrentProcessId() && IsWindowVisible(h) && !strcmp(cls, "ps3recomp_d3d12_engine")) { *(HWND*)lp = h; return FALSE; }
+    return TRUE;
+}
+
+/* The game thread (the Lua script) must NOT apply the change itself: 04/11 menu107, doing it there froze the renderer
+ * for good (no frame presented after the call, run h2). The F1 page applies on the window thread; so does this: the
+ * request is posted to the game window and overlay_message() runs tod_menu_apply_key_win there. key and v point to
+ * static strings (the host's row table). */
+extern "C" void tod_menu_set_key(const char* key, const char* v)
+{
+    HWND w = s_game_hwnd;
+    if (!w) EnumWindows(menu_find_wnd, (LPARAM)&w);
+    if (w && PostMessageA(w, TOD_WM_MENU_KEY, (WPARAM)key, (LPARAM)v)) {
+        fprintf(stderr, "[menu] %s = %s request posted to the window thread\n", key, v ? v : "(default)");
+        return;
+    }
+    fprintf(stderr, "[menu] no game window found: applying on the calling thread\n");
+    tod_menu_apply_key_win(key, v);
+}
+
 
 extern "C" void tod_overlay_init(void)
 {

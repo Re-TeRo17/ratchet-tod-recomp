@@ -17,6 +17,7 @@
 #include "ppu_recomp.h"                 /* the lifter's: ppu_context and the function table */
 #include "ps3emu/vm_watch.h"             /* texture write-watch (vm_watch_init, vm_commit_reserved) */
 #include "ps3emu/beacon.h"               /* walker / presenter phase beacons */
+#include "rsx_logv2.h"                   /* logv2: the structured second log (stall events) */
 #include "win32_compat.h"                /* Sleep, CreateThread, VirtualAlloc... (<windows.h> on Windows) */
 
 #include <stdint.h>
@@ -25,6 +26,10 @@
 #include <string.h>
 #include <math.h>
 #include <string>
+#include <vector>
+#include <signal.h>
+#include <stdarg.h>
+#include <exception>
 #include <filesystem>
 #include "settings.h"                    /* tod.ini */
 #include "install/install.h"             /* --install / --check */
@@ -90,6 +95,10 @@ uint64_t ppu_guest_call(uint32_t, uint64_t, uint64_t, uint64_t, uint64_t,
 extern const char* g_hle_inflight[];                /* ppu_hle.cpp: the HLE each guest tid is inside (64 slots) */
 void     ppu_report_guest_lrs(void);               /* ppu_loader.cpp: every thread's lr/r3/sp */
 void     ppu_report_guest_chains(int depth);        /* ppu_loader.cpp: lr/cia + back-chain return addresses */
+extern "C" void (*g_ppu_chain_hook)(unsigned tid, const uint64_t* gpr, uint64_t lr, uint64_t ctr, uint32_t cia);   /* frz107: per-thread extra dump in the [stall] probe */
+extern "C" void anim_cap_init(void);                   /* capture_patch.c: reads the SPU_HLE_WID0 / ANIM_* environment (frz107: called from main after tod.ini) */
+extern "C" void anim_hle_dump_stall(void);        /* anim_hle.c: the SPU anim consumer (wid0) state */
+extern "C" void spurs_policy_dump_stall(void);    /* spurs_policy.c: resident policy-module contexts (image_id, pc, reservation) */
 extern uint32_t ppu_hle_inject_base;                /* cellGcmSys.c: the GCM window (labels, put/get/ref) */
 extern void (*g_gcm_fifo_kick_hook)(void);          /* cellGcmSys.c: ring-full recycle wakes the walker */
 extern int  (*g_lv2_usleep_hook)(uint32_t lr, uint64_t usec);   /* sys_timer.c: every guest usleep */
@@ -760,6 +769,8 @@ static DWORD WINAPI stall_monitor(LPVOID)
         const uint32_t w = ppu_hle_inject_base;
         fprintf(stderr, "[STALL] no flip for %d s (flips=%u presented=%ld)  FIFO put=%08X get=%08X ref=%08X\n",
                 secs, fc, g_frames_presented, vm_read32(w + 0x2000u), vm_read32(w + 0x2004u), vm_read32(w + 0x2008u));
+        V2EV("stall", "\"no_flip_s\":%d,\"flips\":%u,\"presented\":%ld,\"fifo\":[\"%08X\",\"%08X\",\"%08X\"]",
+             secs, fc, g_frames_presented, vm_read32(w + 0x2000u), vm_read32(w + 0x2004u), vm_read32(w + 0x2008u));
         fprintf(stderr, "[STALL] labels:");
         for (int i = 0; i < 16; i++) fprintf(stderr, " %08X", vm_read32(w + (uint32_t)i * 0x10u));
         fprintf(stderr, "\n");
@@ -911,8 +922,164 @@ void stall_dump_host_threads(void)
     }
     fflush(stderr);
 }
+/* TOD_STALL_LITE=1 (cheap path): the hot threads are found once (and again every 5 s from the probe's idle loop), their handles and
+ * names kept; a snapshot is then only SuspendThread + GetThreadContext + a 8 KB stack copy + ResumeThread per thread, the stack walk
+ * (return addresses into the exe, at most 12) after every thread is running again, and ONE fwrite. Phase times go to the "[stall] lite:" line. */
+static const char* const s_lite_names[] = { "ppu main", "rsx walker", "rsx lane", "rsx draw B2", "rsx encode", "spurs worker", "spurs kernel", "raw spu" };
+struct lite_thr { DWORD tid; HANDLE h; char name[48]; };
+struct lite_cap { DWORD64 rip, rsp; unsigned nw; int got; uint64_t stk[1024]; };
+struct lite_mod { uintptr_t ab; char name[40]; };
+lite_thr s_lt[64]; int s_nlt = 0; ULONGLONG s_lt_tick = 0; double s_lt_names_ms = 0.0;
+lite_cap s_lc[64];
+lite_mod s_lm[48]; int s_nlm = 0;
+double s_lite_ph[4]; double s_lite_susp_max = 0.0;   /* suspend, walk, (unused), print: ms summed over the snapshots of one dump */
+double lite_now_ms(void)
+{
+    static LARGE_INTEGER f; LARGE_INTEGER c;
+    if (!f.QuadPart) QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&c);
+    return (double)c.QuadPart * 1000.0 / (double)f.QuadPart;
+}
+void stall_lite_refresh(void)
+{
+    const double t0 = lite_now_ms();
+    for (int i = 0; i < s_nlt; i++) CloseHandle(s_lt[i].h);
+    s_nlt = 0;
+    typedef HRESULT (WINAPI *pfnGTDl)(HANDLE, PWSTR*);
+    static pfnGTDl gtdl = (pfnGTDl)GetProcAddress(GetModuleHandleA("kernelbase.dll"), "GetThreadDescription");
+    const DWORD self = GetCurrentThreadId(), pid = GetCurrentProcessId();
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snap != INVALID_HANDLE_VALUE) {
+        THREADENTRY32 te; te.dwSize = sizeof te;
+        for (BOOL ok = Thread32First(snap, &te); ok && s_nlt < 64; ok = Thread32Next(snap, &te)) {
+            if (te.th32OwnerProcessID != pid || te.th32ThreadID == self) continue;
+            HANDLE h = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, te.th32ThreadID);
+            if (!h) continue;
+            char nb[96] = ""; PWSTR w = NULL;
+            if (gtdl && SUCCEEDED(gtdl(h, &w)) && w) { snprintf(nb, sizeof nb, "%.80ls", w); LocalFree(w); }
+            bool keep = false;
+            for (size_t k = 0; k < sizeof s_lite_names / sizeof s_lite_names[0]; k++) if (strstr(nb, s_lite_names[k])) { keep = true; break; }
+            if (!keep) { CloseHandle(h); continue; }
+            s_lt[s_nlt].tid = te.th32ThreadID; s_lt[s_nlt].h = h; snprintf(s_lt[s_nlt].name, sizeof s_lt[s_nlt].name, "%s", nb); s_nlt++;
+        }
+        CloseHandle(snap);
+    }
+    s_lt_tick = GetTickCount64();
+    s_lt_names_ms = lite_now_ms() - t0;
+}
+static void lite_modstr(uintptr_t a, char* out, size_t n)
+{
+    MEMORY_BASIC_INFORMATION mi; uintptr_t ab = 0;
+    if (VirtualQuery((const void*)a, &mi, sizeof mi)) ab = (uintptr_t)mi.AllocationBase;
+    if (!ab) { snprintf(out, n, "?+%llX", (unsigned long long)a); return; }
+    for (int i = 0; i < s_nlm; i++)
+        if (s_lm[i].ab == ab) { snprintf(out, n, "%s+%llX", s_lm[i].name, (unsigned long long)(a - ab)); return; }
+    char mn[MAX_PATH] = "?";
+    GetModuleFileNameA((HMODULE)ab, mn, sizeof mn);
+    const char* s = strrchr(mn, '\\'); s = s ? s + 1 : mn;
+    if (s_nlm < 48) { s_lm[s_nlm].ab = ab; snprintf(s_lm[s_nlm].name, sizeof s_lm[s_nlm].name, "%s", s); s_nlm++; }
+    snprintf(out, n, "%s+%llX", s, (unsigned long long)(a - ab));
+}
+void stall_lite_snapshot(int k, double since_ms)
+{
+    uintptr_t base, lo, hi; stall_exe_range(&base, &lo, &hi);
+    const double t0 = lite_now_ms();
+    double smax = 0.0;
+    for (int i = 0; i < s_nlt; i++) {
+        lite_cap& c = s_lc[i]; c.got = 0; c.nw = 0;
+        const double a0 = lite_now_ms();
+        CONTEXT cx; cx.ContextFlags = CONTEXT_CONTROL;
+        if (SuspendThread(s_lt[i].h) != (DWORD)-1) {
+            if (GetThreadContext(s_lt[i].h, &cx)) {
+                c.got = 1; c.rip = cx.Rip; c.rsp = cx.Rsp;
+                MEMORY_BASIC_INFORMATION mi;
+                if (VirtualQuery((const void*)cx.Rsp, &mi, sizeof mi) && mi.State == MEM_COMMIT) {
+                    const uintptr_t end = (uintptr_t)mi.BaseAddress + mi.RegionSize;
+                    size_t n = (end - cx.Rsp) / 8; if (n > 1024) n = 1024;
+                    memcpy(c.stk, (const void*)cx.Rsp, n * 8); c.nw = (unsigned)n;
+                }
+            }
+            ResumeThread(s_lt[i].h);
+        }
+        const double d = lite_now_ms() - a0; if (d > smax) smax = d;
+    }
+    const double t1 = lite_now_ms();
+    static char buf[65536]; int o = 0;
+    for (int i = 0; i < s_nlt; i++) {
+        const lite_cap& c = s_lc[i];
+        if (!c.got || o > (int)sizeof buf - 1800) continue;
+        o += snprintf(buf + o, sizeof buf - o, "[stall-host] snap %d +%.0f ms tid %lu%s%s%s: ", k, since_ms, (unsigned long)s_lt[i].tid,
+                      s_lt[i].name[0] ? " \"" : "", s_lt[i].name, s_lt[i].name[0] ? "\"" : "");
+        if ((uintptr_t)c.rip >= lo && (uintptr_t)c.rip < hi) o += snprintf(buf + o, sizeof buf - o, "exe+%llX", (unsigned long long)(c.rip - base));
+        else { char a[120]; lite_modstr((uintptr_t)c.rip, a, sizeof a); o += snprintf(buf + o, sizeof buf - o, "%s", a); }
+        int ret = 0;
+        for (unsigned j = 0; j < c.nw && ret < 12; j++) {
+            const uintptr_t w = (uintptr_t)c.stk[j];
+            if (w < lo + 8 || w >= hi) continue;
+            const uint8_t* q = (const uint8_t*)w;   /* a return address follows a call */
+            if (q[-5] == 0xE8 || (q[-2] == 0xFF && (q[-1] & 0x38) == 0x10) || (q[-3] == 0xFF && (q[-2] & 0x38) == 0x10) ||
+                (q[-6] == 0xFF && (q[-5] & 0x38) == 0x10) || (q[-7] == 0xFF && (q[-6] & 0x38) == 0x10)) {
+                o += snprintf(buf + o, sizeof buf - o, " %llX", (unsigned long long)(w - base)); ret++;
+            }
+        }
+        buf[o++] = '\n';
+    }
+    const double t2 = lite_now_ms();
+    if (o) { fwrite(buf, 1, (size_t)o, stderr); fflush(stderr); }
+    const double t3 = lite_now_ms();
+    s_lite_ph[0] += t1 - t0; s_lite_ph[1] += t2 - t1; s_lite_ph[3] += t3 - t2;
+    if (smax > s_lite_susp_max) s_lite_susp_max = smax;
+}
+/* frz107: guided read for a PPU thread parked in func_0048DA58 (waits for the completion flag of an animation command; frz106 report).
+ * Everything is read through VirtualQuery + SEH, so a wild guest address cannot crash the dump. Only runs inside the [stall] dump. */
+bool stall_rd32(uint32_t ea, uint32_t* out)
+{
+    if (!vm_base || (ea & 3u) || ea < 0x10000u || ea > 0xE0000000u - 4u) return false;
+    MEMORY_BASIC_INFORMATION mi;
+    if (!VirtualQuery(vm_base + ea, &mi, sizeof mi) || mi.State != MEM_COMMIT || (mi.Protect & (PAGE_NOACCESS | PAGE_GUARD))) return false;
+    __try { *out = __builtin_bswap32(*(volatile const uint32_t*)(vm_base + ea)); } __except (1) { return false; }
+    return true;
+}
+void stall_words(const char* tag, uint32_t ea, int nwords)
+{
+    char b[400]; int o = snprintf(b, sizeof b, "[anim-wait]   %s @%08X:", tag, ea);
+    for (int k = 0; k < nwords && o < (int)sizeof b - 12; k++) {
+        uint32_t v; if (stall_rd32(ea + 4u * k, &v)) o += snprintf(b + o, sizeof b - o, " %08X", v); else o += snprintf(b + o, sizeof b - o, " ????????");
+    }
+    fprintf(stderr, "%s\n", b);
+}
+void stall_chain_hook(unsigned tid, const uint64_t* gpr, uint64_t lr, uint64_t ctr, uint32_t cia)
+{
+    (void)ctr;
+    static const bool test_all = getenv("TOD_STALL_HOOKTEST") != NULL;   /* test only: guided read for EVERY thread (garbage regs = robustness test) */
+    const bool in_wait = test_all || (lr >= 0x48DA58 && lr < 0x48DB58) || (cia >= 0x48DA58 && cia < 0x48DB58);
+    if (!in_wait) return;
+    const uint32_t toc = (uint32_t)gpr[2], sp = (uint32_t)gpr[1], fl = (uint32_t)gpr[31];
+    uint32_t base = 0, gen = 0, put = 0, w = 0, v = 0, h = 0;
+    const bool ob = stall_rd32(toc + 0x6B68u, &base);
+    fprintf(stderr, "[anim-wait] tid %u parked in func_0048DA58 wait loop: flag@%08X toc=%08X sp=%08X base=[toc+6B68]=%s%08X\n", tid, fl, toc, sp, ob ? "" : "(unreadable) ", base);
+    if (ob && base) {
+        const bool og = stall_rd32(base + 0x210u, &gen), op = stall_rd32(base + 0x214u, &put), ow = stall_rd32(base + 0x8220u, &w);
+        fprintf(stderr, "[anim-wait]   ring: gen[base+210]=%s%08X put[base+214]=%s%08X W[base+8220]=%s%08X\n", og ? "" : "(?) ", gen, op ? "" : "(?) ", put, ow ? "" : "(?) ", w);
+        if (ow && w) {
+            if (stall_rd32(w + 4u, &v)) fprintf(stderr, "[anim-wait]   W+4 (published put-index) = %08X\n", v);
+            const uint32_t ln = w & ~127u;
+            for (int r = 0; r < 4; r++) { char t[24]; snprintf(t, sizeof t, "line W row%d", r); stall_words(t, ln + 32u * r, 8); }
+        }
+    }
+    /* handle passed to func_0048DA58 by func_004C0C50: frame of 48DA58 is sp (0x90 bytes), the caller's frame follows */
+    const bool oh = stall_rd32(sp + 0x90u + 0x1C0u, &h);
+    fprintf(stderr, "[anim-wait]   handle [sp+0x90+0x1C0]=%s%08X -> gen=%u idx=%u; expected slot flag = %08X (waiting on %08X)%s\n", oh ? "" : "(?) ", h, h >> 10, h & 0x3FFu,
+            base ? base + 0x230u + ((h & 0x3FFu) << 5) : 0u, fl, (base && base + 0x230u + ((h & 0x3FFu) << 5) == fl) ? " MATCH" : " (no match: handle slot differs)");
+    if (fl >= 0x10020u) {
+        if (stall_rd32(fl, &v)) fprintf(stderr, "[anim-wait]   flag word = %08X (bit0 %s)\n", v, (v & 1u) ? "SET" : "clear");
+        stall_words("descriptor (flag-0x10, 8 words)", fl - 0x10u, 8);
+        for (int k = 1; k <= 4; k++) { char t[40]; snprintf(t, sizeof t, "descriptor -%d", k); stall_words(t, fl - 0x10u - 32u * k, 8); }
+    }
+}
 DWORD WINAPI stall_probe_ms(LPVOID)
 {
+    g_ppu_chain_hook = stall_chain_hook;
     const char* e = getenv("TOD_STALL_MS");
     const long lim = e ? atol(e) : 0;
     if (lim <= 0) return 0;
@@ -922,12 +1089,15 @@ DWORD WINAPI stall_probe_ms(LPVOID)
     auto now_ms = [&]() { LARGE_INTEGER c; QueryPerformanceCounter(&c); return (double)c.QuadPart * 1000.0 / (double)fq.QuadPart; };
     long last = g_frames_presented; double last_t = now_ms(); unsigned steady = 0; int dumps = 0, reported = 0;
     fprintf(stderr, "[stall] probe on: TOD_STALL_MS=%ld, at most %d dumps\n", lim, maxd);
+    const bool lite = getenv("TOD_STALL_LITE") && getenv("TOD_STALL_LITE")[0] == '1';   /* 3 snapshots of the hot threads only (+0, +20, +50 ms) */
+    if (lite) stall_lite_refresh();
     for (;;) {
         Sleep(2);
+        if (lite && !reported && GetTickCount64() - s_lt_tick > 5000) stall_lite_refresh();   /* thread list kept fresh while nothing is stalled */
         const long f = g_frames_presented; const double t = now_ms();
         if (f != last) {
             const double gap = t - last_t;
-            if (reported) { fprintf(stderr, "[stall] ended: %.1f ms without a presented frame (dump #%d)\n", gap, dumps); reported = 0; steady = 0; }
+            if (reported) { fprintf(stderr, "[stall] ended: %.1f ms without a presented frame (dump #%d)\n", gap, dumps); V2EV("stall_end", "\"ms\":%.1f", gap); reported = 0; steady = 0; }
             else if (gap > 2.0 * lim) steady = 0;
             else steady += (unsigned)(f - last);
             last = f; last_t = t;
@@ -938,11 +1108,27 @@ DWORD WINAPI stall_probe_ms(LPVOID)
         fprintf(stderr, "[stall] #%d no presented frame for %.1f ms (limit %ld; presented=%ld flips=%u, %u steady frames before)\n",
                 dumps, t - last_t, lim, f, cellGcm_flip_request_count(), steady);
         const double t0 = now_ms();
-        stall_dump_host_threads();
+        double lite_cost = 0.0;
+        if (lite) { memset(s_lite_ph, 0, sizeof s_lite_ph); s_lite_susp_max = 0.0; stall_lite_snapshot(0, 0.0); }
+        else stall_dump_host_threads();
+        lite_cost = now_ms() - t0;
         beacon_report();
         for (unsigned g = 0; g < 64u; g++)
             if (g_hle_inflight[g]) fprintf(stderr, "[STALL] guest-tid %-3u inside HLE %s\n", g, g_hle_inflight[g]);
         ppu_report_guest_chains(6);
+        anim_hle_dump_stall();
+        spurs_policy_dump_stall();
+        if (lite) {
+            static const double at[2] = { 20.0, 50.0 };
+            for (int k = 0; k < 2; k++) {
+                while (now_ms() - t0 < at[k]) Sleep(1);
+                const double ts = now_ms();
+                stall_lite_snapshot(k + 1, ts - t0);
+                lite_cost += now_ms() - ts;
+            }
+            fprintf(stderr, "[stall] lite: host snapshots cost %.1f ms in total: suspend %.1f ms (slowest thread %.1f), walk %.1f, print %.1f; thread list %d threads, last refresh %.1f ms (off the dump); the rest of the dump time is the waits between snapshots\n",
+                    lite_cost, s_lite_ph[0], s_lite_susp_max, s_lite_ph[1], s_lite_ph[3], s_nlt, s_lt_names_ms);
+        }
         fprintf(stderr, "[stall] dump took %.1f ms\n", now_ms() - t0);
         fflush(stderr);
     }
@@ -979,6 +1165,9 @@ extern "C" void cellSaveData_flush_async(void);   /* hitch116: PS3_SAVEDATA_ASYN
  * -----------------------------------------------------------------------*/
 #define TOD_A_DT_FLOOR 0x8AA558u
 static int g_target_fps = 0;           /* 0 = the game's own pacing */
+static volatile long long s_vblank_period = 0;   /* QPC ticks per host vblank (frame_clock); usr123: changed live by tod_fps_apply_live */
+static long long s_qpf = 0;
+#define TOD_A_TIMER 0x10731D00u        /* the game's Timer object: +4 min dt (cap), +8 max dt */
 
 /* TOD_SYN_REPOLL_US (default 1000; 0 = the game's own): the NextSynth tick
  * (func_006F1B34) kicks one SPU job, and when the job has not finished at its next
@@ -1053,6 +1242,52 @@ static void tod_usleep_pre(ppu_context* ctx, uint64_t* usec)
       } }
 }
 
+#ifdef _WIN32
+/* TOD_PCORES (default 1; 0 = off): on a hybrid CPU (Intel P + E cores) the process runs on the fastest core class only.
+ * Issue #10 (TodeX, 07/11): the frequent/indefinite freezes went away completely with `start "" /affinity FFFF tod.exe`
+ * (P-cores only); on E-cores the game's spin/handshake timing between PPU, SPU and RSX threads breaks down. A CPU with one
+ * core class (every AMD Ryzen, older Intel) is left alone. SetProcessAffinityMask also constrains threads already running. */
+static void pcores_setup(void)
+{
+    const char* e = getenv("TOD_PCORES");
+    if (e && e[0] == '0') return;
+    ULONG len = 0;
+    GetSystemCpuSetInformation(NULL, 0, &len, GetCurrentProcess(), 0);
+    if (!len) return;
+    std::vector<unsigned char> buf(len);
+    if (!GetSystemCpuSetInformation((PSYSTEM_CPU_SET_INFORMATION)buf.data(), len, &len, GetCurrentProcess(), 0)) return;
+    int lo = 255, hi = -1, n_all = 0, n_hi = 0;
+    for (ULONG off = 0; off < len;) {
+        const SYSTEM_CPU_SET_INFORMATION* s = (const SYSTEM_CPU_SET_INFORMATION*)(buf.data() + off);
+        if (s->Type == CpuSetInformation) {
+            const int c = s->CpuSet.EfficiencyClass;
+            if (c < lo) lo = c;
+            if (c > hi) hi = c;
+        }
+        off += s->Size;
+    }
+    if (hi < 0 || hi == lo) { fprintf(stderr, "[pcores] one core class: affinity left alone\n"); return; }
+    DWORD_PTR mask = 0;
+    for (ULONG off = 0; off < len;) {
+        const SYSTEM_CPU_SET_INFORMATION* s = (const SYSTEM_CPU_SET_INFORMATION*)(buf.data() + off);
+        if (s->Type == CpuSetInformation) {
+            n_all++;
+            if (s->CpuSet.EfficiencyClass == hi && s->CpuSet.Group == 0 && s->CpuSet.LogicalProcessorIndex < sizeof(DWORD_PTR) * 8) {
+                mask |= (DWORD_PTR)1 << s->CpuSet.LogicalProcessorIndex; n_hi++;
+            }
+        }
+        off += s->Size;
+    }
+    DWORD_PTR pm = 0, sm = 0;
+    if (GetProcessAffinityMask(GetCurrentProcess(), &pm, &sm)) mask &= pm;
+    if (n_hi < 4 || !mask) { fprintf(stderr, "[pcores] hybrid CPU but only %d fast logical CPUs: affinity left alone\n", n_hi); return; }
+    if (SetProcessAffinityMask(GetCurrentProcess(), mask))
+        fprintf(stderr, "[pcores] hybrid CPU: running on the %d fast logical CPUs of %d (mask %llX); TOD_PCORES=0 turns this off\n", n_hi, n_all, (unsigned long long)mask);
+    else
+        fprintf(stderr, "[pcores] SetProcessAffinityMask failed (%lu)\n", GetLastError());
+}
+#endif
+
 static void set_default_env(const char* name, const char* value)
 {
     const char* cur = getenv(name);
@@ -1069,14 +1304,23 @@ static void fps_setup_argv(void)
     const char* e = getenv("TOD_FPS");
     if (!e || !*e) return;
     const bool lock = !_strnicmp(e, "lock", 4);
-    const int n = atoi(lock ? e + 4 : e);
+    const double nd = atof(lock ? e + 4 : e);
+    const int n = (int)ceil(nd);   /* a decimal value (59.8): the game gets the next whole number, the host's flip pace the exact one */
     if (n < 10 || n > 1000) { fprintf(stderr, "[fps] TOD_FPS=%s ignored (want 10..1000 or lock<n>)\n", e); return; }
+    if (nd != (double)n && nd <= 60.0 && !lock) {
+        char hz[32]; snprintf(hz, sizeof hz, "%.4f", nd);
+        set_default_env("GCM_FLIP_PACE_HZ", hz);
+        fprintf(stderr, "[fps] decimal TOD_FPS=%s: GCM_FLIP_PACE_HZ=%s\n", e, hz);
+    }
     g_target_fps = n;
     char arg[256];
     const char* cur = getenv("PS3_ARGV");
     snprintf(arg, sizeof arg, "%s%s%s;%d", (cur && *cur) ? cur : "", (cur && *cur) ? ";" : "", lock ? "-lockfps" : "-capfps", n);
     _putenv_s("PS3_ARGV", arg);
     if (n > 60) set_default_env("RSX_VSYNC", "0");   /* presenting above 60: do not wait for the monitor */
+    /* iss117 (issue #13): rsx_flip_pace holds the PPU to GCM_FLIP_PACE_HZ (default 60), which capped TOD_FPS=120 at 60 fps.
+     * Above 60 the pace follows TOD_FPS, unless GCM_FLIP_PACE_HZ is set (environment or tod.ini; 0 = no pace). */
+    if (n > 60) { char hz[16]; snprintf(hz, sizeof hz, "%d", n); set_default_env("GCM_FLIP_PACE_HZ", hz); }
     fprintf(stderr, "[fps] TOD_FPS=%s -> PS3_ARGV=%s\n", e, arg);
 }
 
@@ -1096,6 +1340,7 @@ static void fps_setup_argv(void)
 #define TOD_A_ASPECT_16_9 0x8A73FCu
 extern "C" void rsx_present_set_frame_shape(float aspect);
 static float g_tod_aspect = 0.0f;       /* 0 = off */
+extern "C" float g_tod_ui_k = 1.0f;     /* TOD_ASPECT_UI: the HUD's width as a fraction of the frame ((16/9)/aspect), 1 = off; read by src/stubs/ui_xform.cpp */
 static bool parse_ratio(const char* s, float* out)
 {
     char* end = NULL;
@@ -1137,10 +1382,17 @@ static void aspect_patch_guest(void)
     uint32_t w; memcpy(&w, &g_tod_aspect, 4);
     vm_write32(TOD_A_ASPECT_16_9, w);
     rsx_present_set_frame_shape(g_tod_aspect);
+    { /* TOD_ASPECT_UI (default 1 with TOD_ASPECT): the HUD stays 16:9 in the middle of the wide frame (src/stubs/ui_xform.cpp); 0 = it is stretched with the frame */
+        const char* u = getenv("TOD_ASPECT_UI");
+        if (!(u && u[0] == '0')) g_tod_ui_k = (16.0f / 9.0f) / g_tod_aspect;
+        fprintf(stderr, "[aspect] TOD_ASPECT_UI=%s -> HUD k=%.4f\n", u ? u : "(default 1)", (double)g_tod_ui_k);
+    }
     fprintf(stderr, "[aspect] TOD_ASPECT=%s -> %.4f (guest 0x%08X = 0x%08X, present stretched to that shape)\n", getenv("TOD_ASPECT"), g_tod_aspect, TOD_A_ASPECT_16_9, w);
 }
 
 /* After ppu_load_elf: the dt floor for n > 75 (big-endian float 1/n). */
+extern "C" volatile double g_rsx_flip_pace_hz;   /* rsx_draw_engine.c (usr123): >= 0 overrides GCM_FLIP_PACE_HZ live */
+extern "C" volatile int g_rsx_display_reload;
 static void fps_patch_guest(void)
 {
     if (g_target_fps <= 75) return;
@@ -1148,6 +1400,38 @@ static void fps_patch_guest(void)
     uint32_t w; memcpy(&w, &f, 4);
     vm_write32(TOD_A_DT_FLOOR, w);
     fprintf(stderr, "[fps] dt floor 0x%08X = 1/%d (0x%08X)\n", TOD_A_DT_FLOOR, g_target_fps, w);
+}
+
+/* usr123 (user report 05/11: "the 120 fps limit does not work"): the FPS-limit row of the F1 page and of the game's Options page
+ * is applied here, live, on the window thread. What the start-up path (fps_setup_argv) does once, this redoes at run time:
+ * the Timer's min dt (TS+4, and TS+8 for lock<n>) = 1/n, the dt floor constant, the host vblank period of frame_clock, the
+ * flip pace of the RSX (g_rsx_flip_pace_hz) and VSync off above 60. v NULL/"" = original pacing (cap 1/75, 60 Hz pace).
+ * The guest floats are plain aligned 4-byte writes (the guest only reads them each frame). */
+extern "C" void tod_fps_apply_live(const char* v)
+{
+    bool lock = false; double nd = 0.0;
+    if (v && *v) { lock = !_strnicmp(v, "lock", 4); nd = atof(lock ? v + 4 : v); }
+    int n = nd > 0.0 ? (int)ceil(nd) : 0;
+    if (n && (n < 10 || n > 1000)) { fprintf(stderr, "[fps] live TOD_FPS=%s ignored (want 10..1000 or lock<n>)\n", v); return; }
+    auto wf = [](uint32_t ea, float f) { uint32_t w; memcpy(&w, &f, 4); vm_write32(ea, w); };
+    const double hz = n > 60 ? (double)n : 60.0;
+    if (n) {
+        wf(TOD_A_TIMER + 4, 1.0f / (float)n);
+        wf(TOD_A_TIMER + 8, lock ? 1.0f / (float)n : 0.08f);
+    } else {
+        wf(TOD_A_TIMER + 4, 1.0f / 75.0f);
+        wf(TOD_A_TIMER + 8, 0.08f);
+    }
+    wf(TOD_A_DT_FLOOR, n > 75 ? 1.0f / (float)n : 1.0f / 75.0f);
+    g_target_fps = n;
+    if (s_qpf) s_vblank_period = (long long)((double)s_qpf / hz);
+    g_rsx_flip_pace_hz = (n && nd != (double)n && nd <= 60.0 && !lock) ? nd : hz;
+    if (n > 60) {
+        const char* vs = getenv("RSX_VSYNC");
+        if (!(vs && vs[0] == '0')) { _putenv_s("RSX_VSYNC", "0"); g_rsx_display_reload = 1; }
+    }
+    fprintf(stderr, "[fps] live TOD_FPS=%s: Timer cap 1/%d%s, dt floor 1/%d, vblank+flip pace %.2f Hz\n", (v && *v) ? v : "(original)",
+            n ? n : 75, lock ? " (locked)" : "", n > 75 ? n : 75, g_rsx_flip_pace_hz);
 }
 
 /* Frame clock: vblank/flip ticks on QueryPerformanceCounter, sleeping on a
@@ -1172,6 +1456,7 @@ static DWORD WINAPI frame_clock(LPVOID)
     ps3_ccx_role(2);
     ps3_beacon_thread(BEACON_WALKER);
     tl_name("RSX walker", 1);
+    SetThreadDescription(GetCurrentThread(), L"rsx walker (frame clock)");   /* uni127: log v2 showed it unnamed (tid@tod.exe+0xC1D0), 43% of a core */
     /* PS3_SAMPLE_RSX=1 (with PS3_SAMPLE_SPU=1): profile this thread -- the FIFO
      * walker and draw translation -- instead of the SPURS workers. */
     if (getenv("PS3_SAMPLE_RSX")) ps3_sampler_tag_thread();
@@ -1187,7 +1472,7 @@ static DWORD WINAPI frame_clock(LPVOID)
     QueryPerformanceFrequency(&qf);
     const long long freq = qf.QuadPart;
     const double hz = vblank_hz();
-    const long long period = (long long)((double)freq / hz);
+    s_qpf = freq; s_vblank_period = (long long)((double)freq / hz);
     fprintf(stderr, "[fps] vblank %.2f Hz\n", hz);
 
     HANDLE timer = CreateWaitableTimerExW(NULL, NULL, 0x00000002 /* CREATE_WAITABLE_TIMER_HIGH_RESOLUTION */,
@@ -1227,7 +1512,7 @@ static DWORD WINAPI frame_clock(LPVOID)
                 last_flip = cellGcm_flip_request_count();
             }
             if (rsx_ok) { TL_RSX(0, 'B'); cellGcm_rsx_process_fifo(); TL_RSX(0, 'E'); }
-            next_tick += period;
+            next_tick += s_vblank_period;
             fired++;
         }
         if (fired >= 240) next_tick = now;   /* fell too far behind -- resync */
@@ -1437,9 +1722,245 @@ static bool tod_files_in(const std::filesystem::path& dir, std::string* missing)
     return true;
 }
 
+#ifdef _WIN32
+/* ---------------------------------------------------------------------------
+ * crash116: crash reporter (ON by default; it only writes a file when the process is dying).
+ * Writes log\tod_crash.txt (next to log\tod.log; the working folder is the game's) with the code, the thread, the
+ * address as module+offset and 32 frames as module+offset. Nothing here changes the normal run:
+ *  - exceptions that the runtime handles itself (guest-pointer / commit VEHs, __try/__except) are NOT reported:
+ *    access violations etc. are reported only from SetUnhandledExceptionFilter (they reach it only when nobody handled
+ *    them); the vectored handler (last in the chain) looks only at 0xC0000409 and 0xC0000374, which nobody resumes;
+ *  - SPU_NOUNWIND / longjmp paths do not raise exceptions, so they never reach these handlers.
+ * Limit: a raw __fastfail (int 29h) is not seen by any handler; abort() and invalid-parameter calls are, because
+ * _set_abort_behavior clears _CALL_REPORTFAULT (so they no longer end in __fastfail: the exit code is 3).
+ * TOD_MINIDUMP=1 also writes log\tod_crash.dmp (small: stacks only). TOD_CRASH_TEST=abort|av|terminate|invalid|fastfail|stackoverflow
+ * provokes a crash ~TOD_CRASH_TEST_MS (default 6000) ms after the start, to check the report.
+ * -------------------------------------------------------------------------*/
+static volatile LONG s_crash_count = 0;
+static volatile LONG s_crash_in_terminate = 0;
+static int s_crash_minidump = 0;
+
+static const char* crash_module_of(const void* addr, char* out, size_t cap, uintptr_t* off)
+{
+    HMODULE m = NULL;
+    out[0] = 0; *off = (uintptr_t)addr;
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)addr, &m) && m) {
+        char path[MAX_PATH] = {0};
+        GetModuleFileNameA(m, path, MAX_PATH);
+        const char* b = strrchr(path, '\\');
+        strncpy(out, b ? b + 1 : path, cap - 1); out[cap - 1] = 0;
+        *off = (uintptr_t)addr - (uintptr_t)m;
+    } else strncpy(out, "?", cap);
+    return out;
+}
+
+static void crash_put(HANDLE f, const char* fmt, ...)
+{
+    char buf[512];
+    va_list ap; va_start(ap, fmt);
+    int n = _vsnprintf(buf, sizeof buf - 1, fmt, ap);
+    va_end(ap);
+    if (n < 0) n = (int)sizeof buf - 1;
+    buf[n] = 0;
+    DWORD w; WriteFile(f, buf, (DWORD)n, &w, NULL);
+}
+
+static void crash_put_addr(HANDLE f, const char* label, const void* addr)
+{
+    char mod[64]; uintptr_t off;
+    crash_module_of(addr, mod, sizeof mod, &off);
+    crash_put(f, "%s%s+0x%llx\r\n", label, mod, (unsigned long long)off);
+}
+
+static void crash_thread_name(DWORD tid, char* out, size_t cap)
+{
+    out[0] = 0;
+    HANDLE h = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, tid);
+    if (h) {
+        PWSTR d = NULL;
+        if (SUCCEEDED(GetThreadDescription(h, &d)) && d) {
+            WideCharToMultiByte(CP_UTF8, 0, d, -1, out, (int)cap - 1, NULL, NULL);
+            out[cap - 1] = 0;
+            LocalFree(d);
+        }
+        CloseHandle(h);
+    }
+    if (!out[0]) strncpy(out, "(no name)", cap);
+}
+
+static void crash_write_minidump(EXCEPTION_POINTERS* ep, DWORD tid)
+{
+    if (!s_crash_minidump) return;
+    CreateDirectoryA("log", NULL);
+    HANDLE f = CreateFileA("log\\tod_crash.dmp", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) return;
+    MINIDUMP_EXCEPTION_INFORMATION mei; mei.ThreadId = tid; mei.ExceptionPointers = ep; mei.ClientPointers = FALSE;
+    MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), f,
+                      (MINIDUMP_TYPE)(MiniDumpNormal | MiniDumpWithThreadInfo | MiniDumpWithUnloadedModules),
+                      ep ? &mei : NULL, NULL, NULL);
+    CloseHandle(f);
+}
+
+/* kind = what caught it; ep = exception info (NULL for abort/terminate/invalid parameter); tid = the crashing thread */
+static void crash_report(const char* kind, EXCEPTION_POINTERS* ep, DWORD tid, const char* extra)
+{
+    if (InterlockedIncrement(&s_crash_count) > 6) return;   /* cap (a crash loop must not fill the disk) */
+    CreateDirectoryA("log", NULL);
+    HANDLE f = CreateFileA("log\\tod_crash.txt", FILE_APPEND_DATA, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) return;
+    SYSTEMTIME st; GetLocalTime(&st);
+    char tn[128]; crash_thread_name(tid, tn, sizeof tn);
+    crash_put(f, "=== tod crash report %s (%04d-%02d-%02d %02d:%02d:%02d) ===\r\n", TOD_RELEASE_VERSION,
+              st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+    crash_put(f, "kind: %s\r\n", kind);
+    if (extra && extra[0]) crash_put(f, "info: %s\r\n", extra);
+    crash_put(f, "thread: %lu \"%s\"\r\n", (unsigned long)tid, tn);
+    if (ep && ep->ExceptionRecord) {
+        const EXCEPTION_RECORD* er = ep->ExceptionRecord;
+        crash_put(f, "code: 0x%08lX  flags: 0x%lX\r\n", (unsigned long)er->ExceptionCode, (unsigned long)er->ExceptionFlags);
+        crash_put_addr(f, "address: ", er->ExceptionAddress);
+        if ((er->ExceptionCode == 0xC0000005 || er->ExceptionCode == 0xC0000006) && er->NumberParameters >= 2)
+            crash_put(f, "access: %s of 0x%llx\r\n", er->ExceptionInformation[0] == 0 ? "read" : er->ExceptionInformation[0] == 1 ? "write" : "execute",
+                      (unsigned long long)er->ExceptionInformation[1]);
+        if (ep->ContextRecord) {
+            const CONTEXT* c = ep->ContextRecord;
+            crash_put(f, "rip=%llx rsp=%llx rbp=%llx\r\nrax=%llx rcx=%llx rdx=%llx rbx=%llx\r\n",
+                      (unsigned long long)c->Rip, (unsigned long long)c->Rsp, (unsigned long long)c->Rbp,
+                      (unsigned long long)c->Rax, (unsigned long long)c->Rcx, (unsigned long long)c->Rdx, (unsigned long long)c->Rbx);
+            /* unwind from the context of the fault */
+            crash_put(f, "stack (unwound from the fault context):\r\n");
+            CONTEXT cc = *c;
+            __try {
+                for (int i = 0; i < 32; i++) {
+                    DWORD64 rip = cc.Rip;
+                    if (!rip) break;
+                    crash_put_addr(f, "  ", (const void*)rip);
+                    DWORD64 base = 0;
+                    PRUNTIME_FUNCTION fe = RtlLookupFunctionEntry(rip, &base, NULL);
+                    if (!fe) { cc.Rip = *(DWORD64*)cc.Rsp; cc.Rsp += 8; }
+                    else {
+                        PVOID hd = NULL; DWORD64 ef = 0;
+                        RtlVirtualUnwind(UNW_FLAG_NHANDLER, base, rip, fe, &cc, &hd, &ef, NULL);
+                    }
+                }
+            } __except (1) { crash_put(f, "  (unwind failed)\r\n"); }
+        }
+    } else {
+        crash_put(f, "code: (no exception record)\r\n");
+        void* fr[32]; USHORT n = CaptureStackBackTrace(1, 32, fr, NULL);
+        crash_put(f, "stack (%u frames):\r\n", (unsigned)n);
+        for (USHORT i = 0; i < n; i++) crash_put_addr(f, "  ", fr[i]);
+    }
+    crash_put(f, "\r\n");
+    FlushFileBuffers(f);
+    CloseHandle(f);
+    crash_write_minidump(ep, tid);
+    fflush(stdout); fflush(stderr);
+    fprintf(stderr, "[crash] %s: see log\\tod_crash.txt\n", kind);
+    fflush(stderr);
+}
+
+struct CrashJob { EXCEPTION_POINTERS* ep; DWORD tid; const char* kind; };
+static DWORD WINAPI crash_job_thread(LPVOID p)
+{
+    CrashJob* j = (CrashJob*)p;
+    crash_report(j->kind, j->ep, j->tid, NULL);
+    return 0;
+}
+
+static LONG WINAPI crash_unhandled_filter(EXCEPTION_POINTERS* ep)
+{
+    const DWORD tid = GetCurrentThreadId();
+    if (ep && ep->ExceptionRecord && ep->ExceptionRecord->ExceptionCode == 0xC00000FD) {
+        /* stack overflow: no room to format on this stack, report from a helper thread */
+        CrashJob j = { ep, tid, "unhandled exception (stack overflow)" };
+        HANDLE h = CreateThread(NULL, 256 * 1024, crash_job_thread, &j, 0, NULL);
+        if (h) { WaitForSingleObject(h, 10000); CloseHandle(h); }
+    } else {
+        crash_report("unhandled exception", ep, tid, NULL);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;   /* the normal Windows handling (error report / exit code) follows */
+}
+
+static LONG CALLBACK crash_veh(EXCEPTION_POINTERS* ep)
+{
+    if (ep && ep->ExceptionRecord) {
+        const DWORD c = ep->ExceptionRecord->ExceptionCode;
+        if (c == 0xC0000409 || c == 0xC0000374)
+            crash_report("exception 0xC0000409/0xC0000374 (vectored)", ep, GetCurrentThreadId(), NULL);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static void crash_sigabrt(int)
+{
+    if (!s_crash_in_terminate) crash_report("abort() / SIGABRT", NULL, GetCurrentThreadId(), NULL);
+}
+
+static void crash_terminate_handler()
+{
+    InterlockedExchange(&s_crash_in_terminate, 1);
+    crash_report("std::terminate (uncaught C++ exception or noexcept violation)", NULL, GetCurrentThreadId(), NULL);
+    abort();
+}
+
+static void crash_invalid_param(const wchar_t* expr, const wchar_t* func, const wchar_t* file, unsigned line, uintptr_t)
+{
+    char info[400];
+    _snprintf(info, sizeof info - 1, "%ls in %ls (%ls:%u)", expr ? expr : L"?", func ? func : L"?", file ? file : L"?", line);
+    info[sizeof info - 1] = 0;
+    InterlockedExchange(&s_crash_in_terminate, 1);
+    crash_report("CRT invalid parameter", NULL, GetCurrentThreadId(), info);
+    abort();   /* same outcome as the CRT's default (a fatal exit) */
+}
+
+static void tod_crash_install(void)
+{
+    SetUnhandledExceptionFilter(crash_unhandled_filter);
+    AddVectoredExceptionHandler(0, crash_veh);   /* 0 = last: the runtime's own handlers (first=1) run before it */
+    signal(SIGABRT, crash_sigabrt);
+    _set_abort_behavior(0, _CALL_REPORTFAULT);
+    std::set_terminate(crash_terminate_handler);
+    _set_invalid_parameter_handler(crash_invalid_param);
+}
+
+static int crash_so_rec(int n)
+{
+    volatile char b[4096];
+    b[0] = (char)n;
+    return crash_so_rec(n + 1) + b[0];
+}
+
+static DWORD WINAPI crash_test_thread(LPVOID p)
+{
+    const char* what = (const char*)p;
+    const char* ms = getenv("TOD_CRASH_TEST_MS");
+    SetThreadDescription(GetCurrentThread(), L"crash test");
+    Sleep(ms ? (DWORD)atol(ms) : 6000);
+    fprintf(stderr, "[crash-test] provoking '%s'\n", what);
+    if (!strcmp(what, "abort")) abort();
+    else if (!strcmp(what, "av")) { *(volatile int*)(uintptr_t)0x10 = 1; }
+    else if (!strcmp(what, "terminate")) std::terminate();
+    else if (!strcmp(what, "invalid")) { char b[2]; strcpy_s(b, 0, "x"); }
+    else if (!strcmp(what, "fastfail")) __fastfail(7);
+    else if (!strcmp(what, "stackoverflow")) crash_so_rec(0);
+    return 0;
+}
+
+static void tod_crash_config(void)
+{
+    const char* d = getenv("TOD_MINIDUMP");
+    s_crash_minidump = (d && d[0] == '1');
+    const char* t = getenv("TOD_CRASH_TEST");
+    if (t && t[0]) CreateThread(NULL, 0, crash_test_thread, (LPVOID)t, 0, NULL);
+}
+#endif
+
 int main(int argc, char** argv)
 {
+    if (const char* d = getenv("TOD_START_DELAY_MS")) { const int ms = atoi(d); if (ms > 0 && ms < 20000) Sleep((DWORD)ms); }   /* usr123: a teleport-menu relaunch waits for the old process to go */
 #ifdef _WIN32
+    tod_crash_install();   /* crash116: before any thread is created */
     SetThreadDescription(GetCurrentThread(), L"ppu main");   /* the guest's main PPU thread runs here */
 #endif
 #if defined(TOD_X86_V3) && defined(_WIN32)
@@ -1452,6 +1973,13 @@ int main(int argc, char** argv)
     /* tod.ini first: it sets the environment variables everything below reads
      * (a variable already set in the environment wins over the file). */
     tod_settings_load(argc >= 1 ? argv[0] : NULL);
+#ifdef _WIN32
+    pcores_setup();       /* TOD_PCORES: hybrid Intel CPUs run on the P-cores only (issue #10); may come from tod.ini */
+    tod_crash_config();   /* crash116: TOD_MINIDUMP / TOD_CRASH_TEST (may come from tod.ini) */
+#endif
+    /* frz107: the SPU anim hook reads SPU_HLE_WID0 / ANIM_HLE_WATCH / ANIM_HLE_DIAG / ANIM_FAST / ANIM_CAPTURE. It used to run from a static
+     * constructor, before main() and so before the line above: tod.ini never reached it. Now it is called here, after the .ini is in the environment. */
+    anim_cap_init();
 
     /* Installer: tod --install [--base <dir>] <disc>, tod --check <file>.
      * Runs and exits before any of the runtime is touched. */
@@ -1529,6 +2057,24 @@ int main(int argc, char** argv)
      * their "go" state and hold the SPU lane DrawSort needs -> black screen
      * when gameplay starts. SPURS_READY_LEVEL=0 in the environment turns it off. */
     set_default_env("SPURS_READY_LEVEL", "1");
+    /* Release 1.2 performance defaults: the levers of the user's test launcher F (07/11: user play test at Imperial Fight Fest and
+     * Sargasso, four other levels, 20 min soak, check mode with 0 mismatches), plus the SPURS lane-starvation yield and the faster
+     * anim watchdog (3.6 s freeze at Sargasso). Each one stays overridable from the environment or tod.ini (set_default_env never
+     * overwrites); TOD_PERF_DEFAULTS=0 turns the whole set off (1.1 behaviour). */
+    { const char* e = getenv("TOD_PERF_DEFAULTS");
+      if (!(e && e[0] == '0')) {
+          static const char* const kPerf[][2] = {
+              {"RSX_LANES", "3"}, {"RSX_REL_DEFER", "1"}, {"RSX_JOIN_LITE", "1"}, {"RSX_LANES_LABELQ", "1"}, {"RSX_LANES_ZOWN", "1"},
+              {"RSX_LANES_ZLEAN", "1"}, {"RSX_LANES_ZOWN_LRU", "1"}, {"RSX_VPC_BLOCK", "1"}, {"RSX_WALK_PARSE2", "1"}, {"RSX_WALK_SNAP2", "1"},
+              {"RSX_SURF_POOL", "1"}, {"RSX_SURF_POOL2", "1"}, {"RSX_PACE_VBLANK", "1"}, {"RSX_VRAM_GOV", "1"}, {"RSX_ZPRE_RECENT", "120"},
+              {"RSX_FBDEPTH_LRU", "1"}, {"RSX_MS_FEWDRAW", "1"}, {"RSX_MS_TWIN_POOL", "1"}, {"RSX_MS_TWIN_PARK", "1"}, {"RSX_MS_TWIN_FIT", "1"},
+              {"RSX_MS_TWIN_PARK_AGE", "216000"}, {"RSX_MS_TWIN_PARK_PRESS", "200"}, {"RSX_LANES_ZPRE_SAMP", "2"}, {"RSX_LANES_ARENA_MB", "4"},
+              {"RSX_LANES_VCPRO", "1"}, {"RSX_RT_HEAP", "1"}, {"RSX_RT_HEAP_SPARE", "1"}, {"RSX_RT_HEAP_NOJOIN", "1"}, {"RSX_MS_NO_SHADOW", "28"},
+              {"RSX_DISP_DIRECT", "1"}, {"RSX_LANES_K", "32"}, {"SPU_COLL_RING", "3"}, {"SPU_COLL_RING_IGN12", "1"}, {"TOD_FFA8_HAND", "1"},
+              {"TOD_D647_HAND", "1"}, {"SPURS_PM_STARVE_MS", "40"}, {"ANIM_HLE_WD_FAST", "250"},
+          };
+          for (const auto& kv : kPerf) set_default_env(kv[0], kv[1]);
+      } }
     /* RSX subchannel 1 is NV0039 (memory-to-memory copy) in libgcm's layout, which this title uses; the runtime now routes
      * each subchannel by the object bound to it (cellGcmSys.c gcm_sub1_observe) instead of a per-title switch, so nothing
      * to set here. GCM_SUBCH1_2D=1/0 in the environment pins subchannel 1 to NV0039 / NV4097. */

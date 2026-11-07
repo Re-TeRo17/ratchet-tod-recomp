@@ -63,6 +63,12 @@ if(TOD_COLL_SYNC AND EXISTS "${RECOMP_DIR}/ppu_recomp_002.cpp")
     coll_sync_ppu_patch("${RECOMP_DIR}/ppu_recomp_002.cpp" "${CMAKE_BINARY_DIR}/gen/ppu/ppu_recomp_002.cpp" COLL_SYNC_PPU_002)
     list(TRANSFORM RECOMP_SOURCES REPLACE "^${RECOMP_DIR}/ppu_recomp_002.cpp$" "${COLL_SYNC_PPU_002}")
 endif()
+# wide120: hook on the UI pixel transform (func_00660CD8, patched copy of ppu_recomp_003.cpp in build/gen/ppu); TOD_ASPECT_UI at run time
+if(EXISTS "${RECOMP_DIR}/ppu_recomp_003.cpp")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/tools/ui_xform_ppu_patch.cmake")
+    ui_xform_ppu_patch("${RECOMP_DIR}/ppu_recomp_003.cpp" "${CMAKE_BINARY_DIR}/gen/ppu/ppu_recomp_003.cpp" UI_XFORM_PPU_003)
+    list(TRANSFORM RECOMP_SOURCES REPLACE "^${RECOMP_DIR}/ppu_recomp_003.cpp$" "${UI_XFORM_PPU_003}")
+endif()
 list(LENGTH RECOMP_SOURCES RECOMP_SOURCE_COUNT)
 message(STATUS "Lifted sources:  ${RECOMP_SOURCE_COUNT} file(s)")
 
@@ -189,10 +195,12 @@ set(PORT_SOURCES
     src/main.cpp
     src/stubs/missing_hle.cpp
     src/stubs/lua_eh.cpp
+    src/stubs/ui_xform.cpp           # wide120: func_00660CD8 (HUD pixel transform) for TOD_ASPECT_UI
     src/kernel/edgezlib_native.cpp
     src/input/host_input.cpp
     src/input/key_bindings.cpp       # keyboard / mouse bindings (KEY_* in tod.ini, F1 page Controls tab)
     src/input/tod_bot.cpp           # TOD_BOT waypoint bot for benchmarks
+    src/input/tod_autopilot.cpp     # TOD_AUTOPILOT: Ratchet plays by himself (tests)
     src/input/tod_cheat.cpp         # TOD_CHEAT cheat menu (god, heal, bolts, ammo, status)
     src/input/tod_dualsense.cpp     # DualSense adaptive triggers per weapon (+ speaker)
     src/patches/prompts.cpp          # button prompts in the pad's own glyphs
@@ -200,6 +208,7 @@ set(PORT_SOURCES
     src/patches/level_streams.cpp
     src/patches/mods.cpp             # mods\ folder: files read instead of the game's (TOD_MODS)
     src/ui/tod_overlay.cpp           # F1 / SELECT held settings page (Dear ImGui over the D3D12 present)
+    src/ui/tod_logv2_host.cpp        # logv2: host fields of the structured log (CPU/GPU/RAM, threads, position, F7 mark)
     ${TOD_IMGUI_SOURCES}
     src/ui/tod_settings_menu.cpp     # ANTIALIASING row of the game's Options page (host natives)
     src/discord/discord_rpc.cpp     # Discord Rich Presence (own thread, named-pipe IPC, no SDK)
@@ -315,6 +324,7 @@ endif()
 # which replaces COMPILE_OPTIONS.)
 if(MSVC)
     set_property(SOURCE src/ui/tod_overlay.cpp APPEND PROPERTY COMPILE_OPTIONS /utf-8)   # UTF-8 source
+    set_property(SOURCE src/ui/tod_settings_menu.cpp APPEND PROPERTY COMPILE_OPTIONS /utf-8)   # UTF-8 source (tod_menu_text.inc)
 endif()
 if(MSVC)
     set_property(SOURCE src/stubs/lua_eh.cpp APPEND PROPERTY COMPILE_OPTIONS /EHs /EHc-)  # /EHsc is in CMAKE_CXX_FLAGS: /EHs alone keeps c
@@ -400,6 +410,34 @@ if(MSVC)
 else()
     set_source_files_properties(${RECOMP_SOURCES} PROPERTIES
         COMPILE_OPTIONS "-w;-ffp-contract=off;-fwrapv")
+endif()
+
+# TOD_PGO_PROFILE (OFF by default): clang -fprofile-instr-use=<.profdata> for the hot lifted PPU units only
+# (TOD_PGO_UNITS, default ppu_recomp_002/003 = 76% of the main thread's guest time). Env TOD_PGO_PROFILE is the default
+# (wt\logv2_build_rel.bat); empty / 0 / OFF = no PGO (the build is identical to the one without this block).
+# Changing the value rebuilds only those units (+ relink). Stale profile: clang only warns (out-of-date) and drops it per function.
+set(TOD_PGO_PROFILE "$ENV{TOD_PGO_PROFILE}" CACHE STRING "Path of a merged .profdata: -fprofile-instr-use on TOD_PGO_UNITS (empty/0/OFF = off)" FORCE)
+set(TOD_PGO_UNITS "ppu_recomp_002;ppu_recomp_003" CACHE STRING "Lifted units that get TOD_PGO_PROFILE")
+if(TOD_PGO_PROFILE AND NOT TOD_PGO_PROFILE MATCHES "^(0|OFF|off|NO|no)$" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    if(NOT EXISTS "${TOD_PGO_PROFILE}")
+        message(FATAL_ERROR "TOD_PGO_PROFILE=${TOD_PGO_PROFILE}: file not found")
+    endif()
+    file(TO_CMAKE_PATH "${TOD_PGO_PROFILE}" _pgo_prof)
+    if(MSVC)
+        set(_pgo_opts "/clang:-fprofile-instr-use=${_pgo_prof}" "-Wno-profile-instr-out-of-date" "-Wno-profile-instr-unprofiled")
+    else()
+        set(_pgo_opts "-fprofile-instr-use=${_pgo_prof}" "-Wno-profile-instr-out-of-date" "-Wno-profile-instr-unprofiled")
+    endif()
+    set(_pgo_n 0)
+    foreach(_src IN LISTS RECOMP_SOURCES)
+        get_filename_component(_pgo_name "${_src}" NAME_WE)
+        if(_pgo_name IN_LIST TOD_PGO_UNITS)
+            set_property(SOURCE "${_src}" APPEND PROPERTY COMPILE_OPTIONS ${_pgo_opts})
+            set_property(SOURCE "${_src}" APPEND PROPERTY OBJECT_DEPENDS "${_pgo_prof}")
+            math(EXPR _pgo_n "${_pgo_n}+1")
+        endif()
+    endforeach()
+    message(STATUS "PGO profile:     ${_pgo_prof} on ${_pgo_n} unit(s)")
 endif()
 
 # PPU_INLINE_VM: the lifted loads/stores inline the runtime's fast path

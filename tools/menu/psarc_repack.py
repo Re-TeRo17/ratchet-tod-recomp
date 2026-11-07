@@ -7,6 +7,11 @@ replaced on its own. Serving a repacked archive through the overlay is the whole
 
 Usage:
   python -I psarc_repack.py SRC.psarc OUT.psarc INDEX=FILE [INDEX=FILE ...]
+  python -I psarc_repack.py --inplace SRC.psarc OUT.psarc INDEX=FILE ...
+      (menu104 "in place" variant: the TOC and the block-size table keep their length, no entry moves;
+       a replaced entry reuses its own block slots (it may not need more blocks than it had), its data
+       is appended at the end of the file and only its offset/size change in the TOC. Entries whose new
+       data needs fewer blocks leave the spare slots at 0. No-change file with INDEX=@same keeps the data.)
   python -I psarc_repack.py --overlay OVERLAYDIR SRC.psarc INDEX=FILE ...
       (writes OVERLAYDIR/PS3_GAME/USRDIR/packed/game/<name>.psarc: set
        PS3_VFS_OVERLAY=OVERLAYDIR next to PS3_VFS_ROOT=game\\disc)
@@ -33,8 +38,47 @@ def put(v, n):
     return int(v).to_bytes(n, "big")
 
 
+def write_inplace(f, out, hdr, toc, tbl, ents, planned, esz, n, bs, w, toc_len, file_size):
+    """Same file layout, same TOC length: replaced entries reuse their block slots, data goes at the end."""
+    new_tbl = bytearray(tbl)
+    toc = bytearray(toc)
+    pos = file_size
+    blobs = []
+    for idx, usize, blocks, chunks in planned:
+        b0, old_us, _off = ents[idx]
+        old_nb = (old_us + bs - 1) // bs
+        assert len(blocks) <= old_nb, "entry %d needs %d blocks, had %d (not in place)" % (idx, len(blocks), old_nb)
+        for k in range(old_nb):
+            new_tbl[(b0 + k) * w:(b0 + k + 1) * w] = put(blocks[k] if k < len(blocks) else 0, w)
+        e = bytearray(toc[idx * esz:(idx + 1) * esz])
+        e[20:25] = put(usize, 5)
+        e[25:30] = put(pos, 5)
+        toc[idx * esz:(idx + 1) * esz] = e
+        blob = b"".join(chunks)
+        blobs.append(blob)
+        pos += len(blob)
+    with open(out, "wb") as o:
+        o.write(hdr)
+        o.write(toc)
+        o.write(new_tbl)
+        f.seek(toc_len)
+        while True:
+            buf = f.read(8 * MB)
+            if not buf:
+                break
+            o.write(buf)
+        for blob in blobs:
+            o.write(blob)
+    print("wrote %s  (%d bytes, %d entries replaced IN PLACE, TOC unchanged)" % (out, os.path.getsize(out), len(planned)))
+    return 0
+
+
 def main(argv):
     overlay = None
+    inplace = False
+    if argv and argv[0] == "--inplace":
+        inplace = True
+        argv = argv[1:]
     if argv and argv[0] == "--overlay":
         overlay = argv[1]
         argv = argv[2:]
@@ -83,6 +127,8 @@ def main(argv):
                 chunks.append(z)
                 blocks.append(len(z) % 65536 if (w == 2 and len(z) == 65536) else len(z))
             planned.append((idx, len(raw), blocks, chunks))
+        if inplace:
+            return write_inplace(f, out, hdr, toc, tbl, ents, planned, esz, n, bs, w, toc_len, file_size)
         shift = w * sum(len(p[2]) for p in planned)
         pos = file_size + shift            # where the first new entry's data will start
         bi = nblocks
