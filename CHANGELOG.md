@@ -12,6 +12,9 @@
   picture ([#3](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/3)). The HUD, the weapon wheel and
   the menus stay 16:9 in the middle; the pause menu background covers the whole screen. `auto` uses the
   shape of the screen (of the window in windowed mode).
+- **Kreeli Comet's ground fog** is a soft haze over the ground again, as on the PS3, instead of a flat
+  light-blue sheet: the fog's shader reads the pixel position's w as the PS3 does (1/w).
+  `RSX_WPOS_W_RCP = 0` restores the old behaviour. The shader cache is rebuilt once at the first start.
 - **Crop black bars** is now in F1 > Video (it was only in `tod.ini` in 1.2.0)
   ([#12](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/12)).
 

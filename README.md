@@ -58,6 +58,9 @@ on 20 October 2026). The game is playable from the first planet onwards, but it 
   (or `TOD_ASPECT` in `tod.ini`); off by default.
 - **The PC settings in the game's own Options menu**, from the main menu and the pause menu. The game
   prepares the menu from your copy at the first start; nothing else to install.
+- **Armor look and Remove helmet** in F1 > System and in Options: hide the armor, or keep it and take
+  only the helmet off (the armor still protects Ratchet).
+- **Kreeli Comet's ground fog** is a soft haze again, as on the PS3, instead of a flat light-blue sheet.
 - A clearer notice when a new version is available, and Crop black bars in F1 > Video.
 
 ## What's new in 1.2.0
