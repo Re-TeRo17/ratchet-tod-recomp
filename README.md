@@ -141,9 +141,13 @@ downscaled and saved as JPEG for this page.</sub>
     <td width="50%"><a href="https://www.youtube.com/watch?v=9Zxq7EdYPfs"><img src="https://img.youtube.com/vi/9Zxq7EdYPfs/hqdefault.jpg" alt="Ratchet & Clank Tools of Destruction on PC with ray tracing in 4K (video)"></a><br><sub><b>4K with ray tracing</b> - RTX 5080 + Ryzen 7 9800X3D, by ANGEL4EVA</sub></td>
     <td width="50%"><a href="https://www.youtube.com/watch?v=scb1zhBkfrg"><img src="https://img.youtube.com/vi/scb1zhBkfrg/hqdefault.jpg" alt="Ratchet & Clank Future: Tools of Destruction PC Recomp on an RTX 3070 (video)"></a><br><sub><b>On an RTX 3070</b> - by danxo</sub></td>
   </tr>
+  <tr>
+    <td width="50%"><a href="https://www.youtube.com/watch?v=zkKoBaS6y6o"><img src="https://img.youtube.com/vi/zkKoBaS6y6o/hqdefault.jpg" alt="Ratchet and Clank: Tools of Destruction Recomp Out NOW! (video)"></a><br><sub><b>Review</b> - i9 12900K + RTX 3080 Ti, by Video Game Esoterica</sub></td>
+    <td width="50%"></td>
+  </tr>
 </table>
 
-<sub>Both videos were recorded with version 1.0. Made a video with the port? Open an issue with the
+<sub>These videos were recorded with the first versions (1.0 to 1.2.0). Made a video with the port? Open an issue with the
 link and it can be added here.</sub>
 
 <sub><a href="#top">back to top</a></sub>
