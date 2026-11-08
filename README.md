@@ -12,10 +12,12 @@ Direct3D 12, up to 4K and 60 fps.
 ![Version](https://img.shields.io/badge/version-1.2.1-orange)
 ![Game](https://img.shields.io/badge/game-BCES00052%20(EU)-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-yellow)
+[![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/S4jd7643mg)
+[![Follow on X](https://img.shields.io/badge/X-%40Re__TeRo17-black?logo=x)](https://x.com/Re_TeRo17)
+[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-tero17-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/tero17)
 
 [![Get it on RecompLauncher](https://recomplauncher.com/assets/press/launcher/badge-dark.svg)](https://recomplauncher.com/game/ratchet-tod-recomp)
 [![Verified developer on RecompStore](https://recompstore.com/assets/press/verified-dark.svg)](https://recompstore.com/dev/re-tero17)
-[![Follow @Re_TeRo17 on X](https://img.shields.io/badge/follow-%40Re__TeRo17-black?logo=x)](https://x.com/Re_TeRo17)
 
 <img src="docs/screenshots/01_metropolis_kerwan.jpg" alt="Metropolis, Kerwan, running natively on PC at 4K" width="100%">
 
@@ -390,7 +392,8 @@ What comes next, roughly in this order:
 ## Reporting bugs
 
 Please use [GitHub Issues](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues) and the
-bug report form. The more of this you include, the faster it can be fixed:
+bug report form (quick questions are welcome in #help on [Discord](https://discord.gg/S4jd7643mg)). The more
+of this you include, the faster it can be fixed:
 
 1. **What happened**, what you expected, and **where** (planet / level name, what you were doing).
 2. **A screenshot or short clip** if it is visual (Windows' Win+Alt+PrtScn or Xbox Game Bar, or
@@ -415,6 +418,7 @@ entirely optional: the port is and stays free.
 
 <a href="https://buymeacoffee.com/tero17"><img src="docs/images/support_coffee.png" alt="Buy me a coffee" width="300"></a>
 
+- Community and help: [Discord](https://discord.gg/S4jd7643mg)
 - News and updates: [@Re_TeRo17 on X](https://x.com/Re_TeRo17)
 - Bugs and questions: [GitHub Issues](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues)
 - Downloads: [Releases](https://github.com/Re-TeRo17/ratchet-tod-recomp/releases)
