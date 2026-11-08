@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!--
+  DISCORD LINK: put the invite URL in DISCORD_URL below (inside the first <script>).
+  While it is an empty string "" the Discord button stays hidden.
+  Example: const DISCORD_URL = "https://discord.gg/xxxxxxx";
+-->
+<script>const DISCORD_URL = "https://discord.gg/S4jd7643mg";</script>
+<title>Ratchet &amp; Clank: Tools of Destruction Recompiled</title>
+<meta name="description" content="Play Ratchet &amp; Clank: Tools of Destruction (Ratchet and Clank Future, PS3) natively on PC: a free fan-made recompilation, no emulator, Direct3D 12, up to 4K, 60 fps and ultrawide. Bring your own copy of the game.">
+<link rel="canonical" href="https://re-tero17.github.io/ratchet-tod-recomp/">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Ratchet & Clank: Tools of Destruction Recompiled","alternateName":["Ratchet and Clank Tools of Destruction PC","Ratchet & Clank Future: Tools of Destruction PC port","ToD Recomp"],"applicationCategory":"GameApplication","operatingSystem":"Windows 10, Windows 11","softwareVersion":"1.2.1","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"url":"https://re-tero17.github.io/ratchet-tod-recomp/","downloadUrl":"https://github.com/Re-TeRo17/ratchet-tod-recomp/releases/latest","codeRepository":"https://github.com/Re-TeRo17/ratchet-tod-recomp","description":"Fan-made native PC port of Ratchet & Clank: Tools of Destruction (PS3) by static recompilation. Direct3D 12, up to 4K and 60 fps. Requires your own copy of the game."}</script>
+<meta property="og:type" content="website">
+<meta property="og:title" content="Ratchet &amp; Clank: Tools of Destruction Recompiled">
+<meta property="og:description" content="Native on PC. No emulator, Direct3D 12, up to 4K and 60 fps. Fan project; your own copy of the game is required.">
+<meta property="og:url" content="https://re-tero17.github.io/ratchet-tod-recomp/">
+<meta property="og:image" content="https://re-tero17.github.io/ratchet-tod-recomp/assets/banner.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0a1a34">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Michroma&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav aria-label="Main"><div class="wrap">
+<a class="brand" href="#top">ToD Recomp</a>
+<a class="l" href="#about">About</a><a class="l" href="#new">What's new</a><a class="l" href="#roadmap">Roadmap</a><a class="l" href="#install">Install</a><a class="l" href="#requirements">Requirements</a><a class="l" href="#faq">FAQ</a><a class="l" href="#support">Support</a><a class="l" href="#community">Community</a>
+</div></nav>
+
+<header class="hero" id="top"><div class="wrap">
+<p class="kicker"><span class="dot"></span><span>Version 1.2.1 is out &middot; real ultrawide, PC options in the game's menu</span></p>
+<h1 class="title">Ratchet &amp; Clank: Tools of Destruction <span>native PC port</span></h1>
+<img class="banner" src="assets/banner.png" width="2560" height="584" alt="Ratchet &amp; Clank: Tools of Destruction Recompiled">
+<p class="pitch">Ratchet &amp; Clank's first PlayStation 3 adventure, <strong>native on PC</strong>. No emulator: the game's code recompiled for Windows, drawn with Direct3D 12.</p>
+<div class="cta"><a class="btn big" href="https://github.com/Re-TeRo17/ratchet-tod-recomp/releases/latest">Download</a>
+<a class="btn alt" href="https://discord.gg/S4jd7643mg">Join the Discord</a>
+<a class="btn alt" href="https://github.com/Re-TeRo17/ratchet-tod-recomp">Source on GitHub</a></div>
+<ul class="stats">
+<li><b>4K</b><span>and beyond</span></li>
+<li><b>60</b><span>fps target</span></li>
+<li><b>MSAA&nbsp;x8</b><span>anti-aliasing</span></li>
+<li><b>16:9&nbsp;&middot;&nbsp;21:9&nbsp;&middot;&nbsp;32:9</b><span>any screen shape</span></li>
+</ul>
+<p class="meta">Free &middot; Windows 10/11 &middot; needs your own copy of the game (European disc, BCES00052)</p>
+</div></header>
+
+<main class="wrap">
+<section id="about"><h2>What it is</h2>
+<div class="grid">
+<div class="panel card"><h3>Native recompilation, not emulation</h3><p>The game's code is recompiled into a native Windows program. No emulator is involved.</p></div>
+<div class="panel card"><h3>Your own disc, nothing included</h3><p>Nothing of the game is shipped. You supply your own copy and the installer prepares it.</p></div>
+<div class="panel card"><h3>Up to 4K, MSAA, 60 fps target</h3><p>Direct3D 12 rendering, multisample anti-aliasing and a 60 fps target. Press F1 in game for the settings page.</p></div>
+</div></section>
+
+<section id="new"><h2>What's new in 1.2.1</h2>
+<div class="panel">
+<ul class="fx">
+<li>The PC settings are now in the game's own Options menu, set up automatically at the first start (no extra tools).</li>
+<li>Real ultrawide: 21:9, 3440x1440 and 32:9 show a wider view instead of a stretched picture; the HUD and menus stay 16:9 in the middle.</li>
+<li>Armor look and Remove helmet, in F1 and in Options: hide the armor, or keep it and take only the helmet off.</li>
+<li>Kreeli Comet's ground fog is a soft haze again, as on the PS3.</li>
+<li>A clearer notice when a new version is available.</li>
+<li>Aspect ratio and Crop black bars in the F1 settings page.</li>
+</ul>
+<h3 style="margin-top:22px">From 1.2.0</h3>
+<ul class="fx">
+<li>Smoother heavy fights: 57 fps on average, far fewer drops below 45.</li>
+<li>Shaders prepared ahead of time: fewer stutters the first time an effect appears.</li>
+<li>Fixed: video memory slowly filling up, and problems after Alt-Tab.</li>
+</ul>
+<div class="tw"><table>
+<caption>Same heavy fight at Rykan V, 4K, MSAA x8, Ryzen 5 3600 + RTX 3070.</caption>
+<thead><tr><th>Metric</th><th>1.1</th><th>1.2.0+</th></tr></thead>
+<tbody>
+<tr><td>Average fps</td><td>47-51</td><td class="new">57</td></tr>
+<tr><td>Seconds at 59-60 fps</td><td>32-36%</td><td class="new">56-61%</td></tr>
+<tr><td>Seconds below 45 fps</td><td>26-30%</td><td class="new">2-3%</td></tr>
+<tr><td>Peak video memory</td><td>8.1-9.3 GB</td><td class="new">6.2-6.4 GB</td></tr>
+</tbody></table></div>
+<p style="margin-top:18px"><a class="btn alt" href="https://github.com/Re-TeRo17/ratchet-tod-recomp/blob/main/CHANGELOG.md">Full changelog</a></p>
+</div></section>
+
+<section id="roadmap"><h2>Coming soon</h2>
+<div class="grid">
+<div class="panel card soon"><span class="tag">In progress</span><h3>Rock-solid 60 fps</h3><p>Steady 60 fps in the busiest fights too, with no drops and no hitches.</p></div>
+<div class="panel card soon"><span class="tag">Planned</span><h3>Up to 120 fps</h3><p>Higher frame rates for high refresh rate monitors, with the game running at the right speed.</p></div>
+<div class="panel card soon"><span class="tag">Planned</span><h3>DLSS and FSR</h3><p>Upscaling, so 4K and high frame rates fit on more graphics cards.</p></div>
+<div class="panel card soon"><span class="tag">Planned</span><h3>Ray tracing</h3><p>Ray-traced lighting effects on top of the original look, as an option.</p></div>
+<div class="panel card soon"><span class="tag">In progress</span><h3>Visual fixes</h3><p>The remaining glitches from the known issues list, starting with the weapon vendor flicker.</p></div>
+<div class="panel card soon"><span class="tag">Planned</span><h3>Simpler installer</h3><p>Install and update with one program, without the <code>.bat</code> files.</p></div>
+</div>
+<p class="note">Plans, not promises: there are no dates. Follow <a href="https://x.com/Re_TeRo17">@Re_TeRo17</a> or the <a href="https://discord.gg/S4jd7643mg">Discord</a> for news.</p>
+</section>
+
+<section id="install"><h2>Install in 3 steps</h2>
+<ol class="steps">
+<li class="panel"><h3>Download and unzip</h3><p>Get the latest release from GitHub and unzip it anywhere.</p></li>
+<li class="panel"><h3>Run Install.bat</h3><p>Point it to your decrypted disc image (<code>.iso</code> or folder), BCES00052 v1.00.</p></li>
+<li class="panel"><h3>Run Play.bat</h3><p>Start the game.</p></li>
+</ol>
+<div class="grid" style="margin-top:20px">
+<div class="panel card"><h3>Updating</h3><p>Download the new release and run <code>Update.bat</code>.</p></div>
+<div class="panel card"><h3>Steam Deck / SteamOS</h3><p>A community guide covers running the Windows build through Proton.</p><p style="margin-top:12px"><a class="btn alt" href="https://github.com/Re-TeRo17/ratchet-tod-recomp#steam-deck--steamos-proton-community-guide">Read the guide</a></p></div>
+</div>
+<p class="center" style="margin-top:26px"><a class="btn" href="https://github.com/Re-TeRo17/ratchet-tod-recomp/releases/latest">Download</a></p>
+</section>
+
+<section id="requirements"><h2>Requirements</h2>
+<div class="panel"><ul class="fx" style="margin:0">
+<li>Windows 10/11, 64-bit</li>
+<li>CPU with AVX2, FMA and BMI2 (Intel 4th gen or newer, any Ryzen). A fast 6+ core CPU matters most.</li>
+<li>Direct3D 12 capable GPU</li>
+<li>16 GB RAM</li>
+<li>About 24 GB of free disk space</li>
+</ul></div></section>
+
+<section id="faq"><h2>FAQ</h2>
+<div class="panel">
+<details><summary>Which copy of the game do I need?</summary><p>The European disc, BCES00052 v1.00, as a decrypted <code>.iso</code> or folder. Other regions are not supported yet.</p></details>
+<details><summary>Is anything of the game included?</summary><p>No. Nothing of the game is included; you need your own copy.</p></details>
+<details><summary>Does it run on Linux / Steam Deck?</summary><p>The Windows build runs through Proton. See the <a href="https://github.com/Re-TeRo17/ratchet-tod-recomp#steam-deck--steamos-proton-community-guide">community guide</a>.</p></details>
+<details><summary>Why does the CPU matter so much?</summary><p>The game's SPU code runs on your CPU cores, so the heaviest scenes are CPU-limited.</p></details>
+<details><summary>Something went wrong, what do I do?</summary><p>Open an <a href="https://github.com/Re-TeRo17/ratchet-tod-recomp/issues">issue</a> and attach <code>log\tod.log</code>, <code>log\tod_v2_*.jsonl</code> and <code>log\tod_crash.txt</code>. Press F7 in game to mark the moment.</p></details>
+</div></section>
+
+<section id="support"><h2>Support</h2>
+<div class="panel center">
+<p>This is a free fan project. If you enjoy it, you can support its development.</p>
+<a class="coffee" href="https://buymeacoffee.com/tero17"><img src="assets/support_coffee.png" width="720" height="128" loading="lazy" alt="Buy me a coffee"></a>
+<p style="margin-top:14px">Supporters: 7GP, IS, S</p>
+</div></section>
+
+<section id="community"><h2>Community</h2>
+<div class="panel"><div class="row">
+<a class="btn alt" href="https://github.com/Re-TeRo17/ratchet-tod-recomp/issues">GitHub Issues</a>
+<a class="btn alt" href="https://github.com/Re-TeRo17/ratchet-tod-recomp/releases">Releases</a>
+<a class="btn alt" id="discord" href="#" hidden>Discord</a>
+<a class="btn alt" href="https://x.com/Re_TeRo17">X @Re_TeRo17</a>
+</div></div></section>
+</main>
+
+<footer><div class="wrap">
+<nav class="fnav" aria-label="Footer"><a href="#top">Home</a><a href="#about">About</a><a href="#new">What's new</a><a href="#roadmap">Roadmap</a><a href="#install">Install</a><a href="#requirements">Requirements</a><a href="#faq">FAQ</a><a href="#support">Support</a><a href="#community">Community</a></nav>
+<div class="fsoc"><a href="https://github.com/Re-TeRo17/ratchet-tod-recomp">GitHub</a><a href="https://github.com/Re-TeRo17/ratchet-tod-recomp/releases/latest">Download</a><a href="https://discord.gg/S4jd7643mg">Discord</a><a href="https://x.com/Re_TeRo17">X @Re_TeRo17</a><a href="https://buymeacoffee.com/tero17">Buy me a coffee</a></div>
+<p>Fan project. Not affiliated with Sony Interactive Entertainment or Insomniac Games. Ratchet &amp; Clank is a trademark of its owners. Nothing of the game is included; you need your own copy.</p>
+<p>Credits: ps3recomp by sp00nznet, dod3-recomp by soyjxck, RACiT by HighDrexler.</p>
+</div></footer>
+
+<script>
+(function(){
+var d=document.getElementById('discord');
+if(typeof DISCORD_URL==='string'&&DISCORD_URL){d.href=DISCORD_URL;d.hidden=false}
+})();
+</script>
+</body>
+</html>
