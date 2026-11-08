@@ -438,6 +438,7 @@ A big thank you to the people who support the project on Buy Me a Coffee:
 
 - **7GP**
 - **IS**
+- **S**
 
 ## Credits
 
