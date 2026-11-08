@@ -382,13 +382,18 @@ filing a new report.
 
 ## Roadmap
 
-What comes next, roughly in this order:
+What comes next. Plans, not promises: there are no dates.
 
-- A rock-solid 60 fps in the busiest fights too.
-- Fixes for the visual problems listed under [Known issues](#known-issues), starting with the
-  flicker in the weapon vendor screen.
-- A simpler installer, without the `.bat` files.
-- More polish, and fixes for what you report.
+- **Rock-solid 60 fps** (in progress): a steady 60 fps in the busiest fights too, with no drops and no hitches.
+- **Up to 120 fps** (planned): higher frame rates for high refresh rate monitors, with the game running
+  at the right speed.
+- **DLSS and FSR** (planned): upscaling, so 4K and high frame rates fit on more graphics cards.
+- **Ray tracing** (planned): ray-traced lighting effects on top of the original look, as an option.
+- **Visual fixes** (in progress): the problems listed under [Known issues](#known-issues), starting with
+  the flicker in the weapon vendor screen.
+- **Simpler installer** (planned): install and update with one program, without the `.bat` files.
+
+News: [@Re_TeRo17 on X](https://x.com/Re_TeRo17) and the [Discord](https://discord.gg/S4jd7643mg).
 
 ## Reporting bugs
 
