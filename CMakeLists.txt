@@ -75,6 +75,18 @@ if(_P002)
     aspect_proj_ppu_patch("${_P002}" "${CMAKE_BINARY_DIR}/gen/ppu_aspect/ppu_recomp_002.cpp" ASPECT_PROJ_PPU_002)
     list(TRANSFORM RECOMP_SOURCES REPLACE "^${_P002}$" "${ASPECT_PROJ_PPU_002}")
 endif()
+# 1.2.1: TOD_ARMOR_LOOK / TOD_REMOVE_HELMET hooks (armor getter func_001E2110, head read in func_001E4CC0) in ppu_recomp_000.cpp
+set(_P000 "")
+foreach(_s IN LISTS RECOMP_SOURCES)
+    if(_s MATCHES "ppu_recomp_000[.]cpp$")
+        set(_P000 "${_s}")
+    endif()
+endforeach()
+if(_P000)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/tools/armor_look_ppu_patch.cmake")
+    armor_look_ppu_patch("${_P000}" "${CMAKE_BINARY_DIR}/gen/ppu_armor/ppu_recomp_000.cpp" ARMOR_LOOK_PPU_000)
+    list(TRANSFORM RECOMP_SOURCES REPLACE "^${_P000}$" "${ARMOR_LOOK_PPU_000}")
+endif()
 # wide120: hook on the UI pixel transform (func_00660CD8, patched copy of ppu_recomp_003.cpp in build/gen/ppu); TOD_ASPECT_UI at run time
 if(EXISTS "${RECOMP_DIR}/ppu_recomp_003.cpp")
     include("${CMAKE_CURRENT_SOURCE_DIR}/tools/ui_xform_ppu_patch.cmake")
@@ -209,6 +221,7 @@ set(PORT_SOURCES
     src/stubs/lua_eh.cpp
     src/stubs/ui_xform.cpp           # wide120: func_00660CD8 (HUD pixel transform) for TOD_ASPECT_UI
     src/stubs/aspect_hor.cpp         # r121u: TOD_ASPECT Hor+ (render camera FOV)
+    src/stubs/armor_look.cpp         # 1.2.1: TOD_ARMOR_LOOK, TOD_REMOVE_HELMET (Ratchet's look with armor)
     src/kernel/edgezlib_native.cpp
     src/input/host_input.cpp
     src/input/key_bindings.cpp       # keyboard / mouse bindings (KEY_* in tod.ini, F1 page Controls tab)

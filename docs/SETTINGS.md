@@ -40,6 +40,8 @@ borderless window, VSync on, 60 fps target, English.
 | `RSX_TEX_LOD_BIAS` | Texture sharpness: 0 (default), -0.5 or -1. Negative values pick sharper detail levels (more shimmer on fine patterns). Applies at the next start. |
 | `TOD_ASPECT` | Ultrawide (a wider view, since 1.2.1), off by default (16:9); also F1 > Video > Aspect ratio: `21:9`, `32:9`, `43:18`, `<w>:<h>`, a ratio (1.2 to 4) or `auto`. See [Features](FEATURES.md#experimental-options-off-by-default). Read at start-up only. |
 | `TOD_PROMPTS` | Button icons: `auto` (follows the last used device), `ps3`, `ps4`, `ps5`, `xbox`, `switch`, `keyboard`. |
+| `TOD_ARMOR_LOOK` | 1.2.1: `hidden` = Ratchet keeps his normal suit whatever armor is equipped (the armor still protects him; saves are unchanged). F1 > System and Options; applies at once. |
+| `TOD_REMOVE_HELMET` | 1.2.1: `1` = Ratchet takes the armor's helmet off and shows his face (the armor stays and still protects him). F1 > System and Options; applies at once. |
 | `PS3_LANG` | Game language, see below. |
 | `AUDIO_LATENCY_MS`, `AUDIO_LOWLAT` | Audio safety margin (default 32 ms) and the experimental low-latency output (default off, the stable choice). |
 | `TOD_SAVE_PICKER` | 1.1: the save slot list when saving and loading (on by default; 0 = off). |

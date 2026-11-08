@@ -21,6 +21,9 @@
   the menu from your own copy of the game (about half a second, once; the original files are never
   changed). The rows (resolution, window mode, anti-aliasing, shadows, ray-traced AO, VSync and more)
   appear in Options from the main menu and from the pause menu. `TOD_MENU = 0` in `tod.ini` turns it off.
+- **Armor look and Remove helmet (F1 > System, and in Options):** hide the equipped armor so Ratchet keeps
+  his normal suit, or keep the armor and take only the helmet off. The armor still protects him and saves
+  are unchanged; both apply at once (`TOD_ARMOR_LOOK = hidden`, `TOD_REMOVE_HELMET = 1`).
 - **New version notice:** a bigger panel at the top of the screen, which stays on the main menu until you
   open the F1 page.
 - Credits: thanks to our new supporter.

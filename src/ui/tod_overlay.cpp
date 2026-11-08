@@ -274,6 +274,12 @@ void init_rows()
           { { NULL, "Auto" }, { "ps3", "PlayStation 3" }, { "ps4", "PlayStation 4" }, { "ps5", "PlayStation 5" },
             { "xbox", "Xbox" }, { "switch", "Nintendo Switch" }, { "keyboard", "Keyboard" } },
           0, true, TAB_SYSTEM });
+    add({ "TOD_ARMOR_LOOK", "Armor look",
+          "Hidden: Ratchet keeps his normal suit whatever armor is equipped (the armor still protects him; saves are unchanged).",
+          { { NULL, "Shown" }, { "hidden", "Hidden" } }, 0, true, TAB_SYSTEM });
+    add({ "TOD_REMOVE_HELMET", "Remove helmet",
+          "On: let Ratchet breathe a little easier. The helmet comes off, the armor stays and still protects him.",
+          { { NULL, "Off" }, { "1", "On" } }, 0, true, TAB_SYSTEM });
     {
         Row r{ NULL, "Saves folder", "Opens the folder that holds your saves in Explorer. PS3_SAVEDATA_ROOT in tod.ini moves it; "
                "the layout (one BCES00052_SAVE_<n> folder per save) is the one RPCS3 uses.",

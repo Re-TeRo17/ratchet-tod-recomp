@@ -6,15 +6,17 @@
 struct TxItem { int id; const char* s; };
 
 const TxItem kTxEn[] = {
+    {83,"REMOVE HELMET:"},{123,"Let Ratchet breathe a little easier. The armor stays and still protects him."},
+    {47,"SHOWN"},{48,"HIDDEN"},{82,"ARMOR LOOK:"},{122,"Hidden: Ratchet keeps his normal suit with any armor (it still protects him)."},
     {1,"OFF"},{2,"ON"},{3,"FXAA"},{4,"MSAA x2"},{5,"MSAA x4"},{6,"MSAA x8"},{7,"1X (720P)"},{8,"1.5X (1080P)"},{9,"2X (1440P)"},{10,"3X (4K)"},
     {11,"WINDOWED"},{12,"BORDERLESS"},{13,"FULLSCREEN"},{14,"ORIGINAL"},{15,"30"},{16,"60"},{17,"120"},{18,"UNLIMITED"},{19,"FPS"},{20,"DETAILED"},
     {21,"16:9"},{22,"21:9"},{23,"32:9"},{24,"AUTO"},{25,"2X"},{26,"4X"},{27,"8X"},{28,"16X"},{29,"DEFAULT"},{30,"SHARPER"},{31,"SHARPEST"},
     {32,"STANDARD"},{33,"HIGH"},{34,"VERY HIGH"},{35,"LOW"},{36,"MEDIUM"},{37,"PS3"},{38,"PS4"},{39,"PS5"},{40,"XBOX"},{41,"SWITCH"},{42,"KEYBOARD"},
     {43,"FULL"},{44,"75 %"},{45,"50 %"},{46,"25 %"},
-    {61,"VIDEO: RESOLUTION:"},{62,"VIDEO: WINDOW MODE:"},{63,"VIDEO: ASPECT RATIO:"},{64,"VIDEO: ANTIALIASING:"},{65,"VIDEO: ANISOTROPIC:"},
-    {66,"VIDEO: TEXTURE SHARP:"},{67,"VIDEO: SHADOWS:"},{68,"VIDEO: BLOOM:"},{69,"VIDEO: RAY TRACED AO:"},{70,"VIDEO: RT QUALITY:"},
-    {71,"VIDEO: REFLECTIONS:"},{72,"VIDEO: VSYNC:"},{73,"VIDEO: FPS LIMIT:"},{74,"HUD: FPS COUNTER:"},{75,"HUD: BUTTON ICONS:"},
-    {76,"AUDIO: SOUND BOOST:"},{77,"GAME: SKIP MOVIES:"},{78,"GAME: DISCORD:"},{79,"PAD: DS TRIGGERS:"},{80,"PAD: DS TRIGGER POWER:"},{81,"PAD: DS FIRE WITH R2:"},
+    {61,"RESOLUTION:"},{62,"WINDOW MODE:"},{63,"ASPECT RATIO:"},{64,"ANTIALIASING:"},{65,"ANISOTROPIC FILTER:"},
+    {66,"TEXTURE SHARPNESS:"},{67,"SHADOWS:"},{68,"BLOOM:"},{69,"RAY TRACED AO:"},{70,"RT QUALITY:"},
+    {71,"REFLECTIONS:"},{72,"VSYNC:"},{73,"FPS LIMIT:"},{74,"FPS COUNTER:"},{75,"BUTTON ICONS:"},
+    {76,"SOUND BOOST:"},{77,"SKIP MOVIES:"},{78,"DISCORD:"},{79,"DUALSENSE TRIGGERS:"},{80,"TRIGGER STRENGTH:"},{81,"FIRE WITH R2:"},
     {101,"Resolution the game is drawn at. Costs speed; the game pauses a moment when it changes."},
     {102,"Windowed, borderless window or exclusive fullscreen."},
     {103,"Screen shape: 21:9 and 32:9 widen the view. AUTO follows the window."},
@@ -40,6 +42,8 @@ const TxItem kTxEn[] = {
     {0,0} };
 
 const TxItem kTxIt[] = {
+    {83,"TOGLI CASCO:"},{123,"Lascia respirare un po' meglio Ratchet. L'armatura resta e lo protegge comunque."},
+    {47,"VISIBILE"},{48,"NASCOSTA"},{82,"ASPETTO ARMATURA:"},{122,"Nascosta: Ratchet tiene la tuta normale con qualsiasi armatura (che lo protegge comunque)."},
     {11,"FINESTRA"},{12,"SENZA BORDI"},{13,"SCHERMO INTERO"},{14,"ORIGINALE"},{18,"ILLIMITATO"},{20,"DETTAGLIATO"},{29,"PREDEFINITO"},{30,"PIU' NITIDA"},
     {31,"MASSIMA"},{33,"ALTA"},{34,"ALTISSIMA"},{35,"BASSA"},{36,"MEDIA"},{42,"TASTIERA"},{43,"PIENA"},
     {61,"RISOLUZIONE:"},{62,"MODALITA' FINESTRA:"},{63,"RAPPORTO D'ASPETTO:"},{64,"ANTIALIASING:"},{65,"FILTRO ANISOTROPICO:"},{66,"NITIDEZZA TEXTURE:"},
@@ -70,6 +74,8 @@ const TxItem kTxIt[] = {
     {0,0} };
 
 const TxItem kTxFr[] = {
+    {83,"RETIRER LE CASQUE :"},{123,"Laissez Ratchet respirer un peu mieux. L'armure reste et le protège toujours."},
+    {47,"VISIBLE"},{48,"MASQUÉE"},{82,"APPARENCE ARMURE :"},{122,"Masquée : Ratchet garde sa tenue normale avec toute armure (elle le protège toujours)."},
     {11,"FENÊTRE"},{12,"SANS BORDURE"},{13,"PLEIN ÉCRAN"},{14,"ORIGINAL"},{18,"ILLIMITÉ"},{20,"DÉTAILLÉ"},{29,"PAR DÉFAUT"},{30,"PLUS NETTE"},
     {31,"MAXIMALE"},{33,"ÉLEVÉE"},{34,"TRÈS ÉLEVÉE"},{35,"FAIBLE"},{36,"MOYENNE"},{42,"CLAVIER"},{43,"MAX"},
     {61,"RÉSOLUTION :"},{62,"MODE FENÊTRE :"},{63,"FORMAT D'IMAGE :"},{64,"ANTICRÉNELAGE :"},{65,"FILTRE ANISOTROPE :"},{66,"NETTETÉ TEXTURES :"},
@@ -100,6 +106,8 @@ const TxItem kTxFr[] = {
     {0,0} };
 
 const TxItem kTxDe[] = {
+    {83,"HELM ABNEHMEN:"},{123,"Lass Ratchet etwas freier atmen. Die Rüstung bleibt und schützt ihn weiterhin."},
+    {47,"AN"},{48,"AUS"},{82,"RÜSTUNG ANZEIGEN:"},{122,"Aus: Ratchet behält seinen normalen Anzug bei jeder Rüstung (sie schützt ihn weiterhin)."},
     {1,"AUS"},{2,"EIN"},
     {11,"FENSTER"},{12,"RAHMENLOS"},{13,"VOLLBILD"},{14,"ORIGINAL"},{18,"UNBEGRENZT"},{20,"DETAILLIERT"},{29,"STANDARD"},{30,"SCHÄRFER"},
     {31,"MAXIMAL"},{33,"HOCH"},{34,"SEHR HOCH"},{35,"NIEDRIG"},{36,"MITTEL"},{42,"TASTATUR"},{43,"VOLL"},
@@ -131,6 +139,8 @@ const TxItem kTxDe[] = {
     {0,0} };
 
 const TxItem kTxEs[] = {
+    {83,"QUITAR CASCO:"},{123,"Deja que Ratchet respire un poco mejor. La armadura se queda y le sigue protegiendo."},
+    {47,"VISIBLE"},{48,"OCULTA"},{82,"ASPECTO ARMADURA:"},{122,"Oculta: Ratchet lleva su traje normal con cualquier armadura (que le sigue protegiendo)."},
     {11,"VENTANA"},{12,"SIN BORDES"},{13,"PANTALLA COMPLETA"},{14,"ORIGINAL"},{18,"ILIMITADO"},{20,"DETALLADO"},{29,"PREDETERMINADO"},{30,"MÁS NÍTIDA"},
     {31,"MÁXIMA"},{32,"ESTÁNDAR"},{33,"ALTA"},{34,"MUY ALTA"},{35,"BAJA"},{36,"MEDIA"},{42,"TECLADO"},{43,"COMPLETA"},
     {61,"RESOLUCIÓN:"},{62,"MODO DE VENTANA:"},{63,"RELACIÓN DE ASPECTO:"},{64,"ANTIALIASING:"},{65,"FILTRO ANISOTRÓPICO:"},{66,"NITIDEZ DE TEXTURAS:"},
@@ -161,6 +171,7 @@ const TxItem kTxEs[] = {
     {0,0} };
 
 const TxItem kTxNl[] = {
+    {47,"ZICHTBAAR"},{48,"VERBORGEN"},{82,"PANTSER TONEN:"},{122,"Verborgen: Ratchet houdt zijn gewone pak met elk pantser (dat hem blijft beschermen)."},{83,"HELM AF:"},{123,"Laat Ratchet wat makkelijker ademen. Het pantser blijft en beschermt hem nog steeds."},
     {11,"VENSTER"},{12,"RANDLOOS"},{13,"VOLLEDIG SCHERM"},{14,"ORIGINEEL"},{18,"ONBEPERKT"},{20,"GEDETAILLEERD"},{29,"STANDAARD"},{30,"SCHERPER"},
     {31,"SCHERPST"},{32,"STANDAARD"},{33,"HOOG"},{34,"ZEER HOOG"},{35,"LAAG"},{36,"MIDDEL"},{42,"TOETSENBORD"},{43,"VOL"},
     {61,"RESOLUTIE:"},{62,"VENSTERMODUS:"},{63,"BEELDVERHOUDING:"},{64,"ANTIALIASING:"},{65,"ANISOTROPISCH:"},{66,"TEXTUURSCHERPTE:"},
@@ -191,6 +202,7 @@ const TxItem kTxNl[] = {
     {0,0} };
 
 const TxItem kTxPt[] = {
+    {47,"VISIVEL"},{48,"OCULTA"},{82,"ASPETO DA ARMADURA:"},{122,"Oculta: Ratchet mantém o fato normal com qualquer armadura (que continua a protegê-lo)."},{83,"TIRAR CAPACETE:"},{123,"Deixa o Ratchet respirar um pouco melhor. A armadura fica e continua a protegê-lo."},
     {11,"JANELA"},{12,"SEM BORDAS"},{13,"ECRÃ INTEIRO"},{14,"ORIGINAL"},{18,"ILIMITADO"},{20,"DETALHADO"},{29,"PREDEFINIDO"},{30,"MAIS NÍTIDA"},
     {31,"MÁXIMA"},{32,"PADRÃO"},{33,"ALTA"},{34,"MUITO ALTA"},{35,"BAIXA"},{36,"MÉDIA"},{42,"TECLADO"},{43,"TOTAL"},
     {61,"RESOLUÇÃO:"},{62,"MODO DE JANELA:"},{63,"FORMATO DO ECRÃ:"},{64,"ANTIALIASING:"},{65,"FILTRO ANISOTRÓPICO:"},{66,"NITIDEZ DAS TEXTURAS:"},
@@ -221,6 +233,7 @@ const TxItem kTxPt[] = {
     {0,0} };
 
 const TxItem kTxSv[] = {
+    {47,"SYNLIG"},{48,"DOLD"},{82,"RUSTNINGENS UTSEENDE:"},{122,"Dold: Ratchet behåller sin vanliga dräkt med vilken rustning som helst (den skyddar honom ändå)."},{83,"TA AV HJÄLMEN:"},{123,"Låt Ratchet andas lite lättare. Rustningen sitter kvar och skyddar honom ändå."},
     {11,"FÖNSTER"},{12,"RAMLÖST"},{13,"HELSKÄRM"},{14,"ORIGINAL"},{18,"OBEGRÄNSAD"},{20,"DETALJERAD"},{29,"STANDARD"},{30,"SKARPARE"},
     {31,"SKARPAST"},{33,"HÖG"},{34,"MYCKET HÖG"},{35,"LÅG"},{36,"MEDEL"},{42,"TANGENTBORD"},{43,"FULL"},
     {61,"UPPLÖSNING:"},{62,"FÖNSTERLÄGE:"},{63,"BILDFORMAT:"},{64,"KANTUTJÄMNING:"},{65,"ANISOTROPISK:"},{66,"TEXTURSKÄRPA:"},
@@ -251,6 +264,7 @@ const TxItem kTxSv[] = {
     {0,0} };
 
 const TxItem kTxNo[] = {
+    {47,"SYNLIG"},{48,"SKJULT"},{82,"RUSTNINGENS UTSEENDE:"},{122,"Skjult: Ratchet beholder sin vanlige drakt med hvilken som helst rustning (den beskytter ham fortsatt)."},{83,"TA AV HJELMEN:"},{123,"La Ratchet puste litt lettere. Rustningen blir og beskytter ham fortsatt."},
     {11,"VINDU"},{12,"RAMMELØS"},{13,"FULLSKJERM"},{14,"ORIGINAL"},{18,"UBEGRENSET"},{20,"DETALJERT"},{29,"STANDARD"},{30,"SKARPERE"},
     {31,"SKARPEST"},{33,"HØY"},{34,"SVÆRT HØY"},{35,"LAV"},{36,"MIDDELS"},{42,"TASTATUR"},{43,"FULL"},
     {61,"OPPLØSNING:"},{62,"VINDUSMODUS:"},{63,"BILDEFORMAT:"},{64,"KANTUTJEVNING:"},{65,"ANISOTROPISK:"},{66,"TEKSTURSKARPHET:"},
@@ -281,6 +295,7 @@ const TxItem kTxNo[] = {
     {0,0} };
 
 const TxItem kTxDa[] = {
+    {47,"SYNLIG"},{48,"SKJULT"},{82,"RUSTNINGENS UDSEENDE:"},{122,"Skjult: Ratchet beholder sin normale dragt med enhver rustning (den beskytter ham stadig)."},{83,"TAG HJELMEN AF:"},{123,"Lad Ratchet trække vejret lidt lettere. Rustningen bliver og beskytter ham stadig."},
     {11,"VINDUE"},{12,"RAMMELØS"},{13,"FULD SKÆRM"},{14,"ORIGINAL"},{18,"UBEGRÆNSET"},{20,"DETALJERET"},{29,"STANDARD"},{30,"SKARPERE"},
     {31,"SKARPEST"},{33,"HØJ"},{34,"MEGET HØJ"},{35,"LAV"},{36,"MELLEM"},{42,"TASTATUR"},{43,"FULD"},
     {61,"OPLØSNING:"},{62,"VINDUESTILSTAND:"},{63,"BILLEDFORMAT:"},{64,"KANTGLATNING:"},{65,"ANISOTROPISK:"},{66,"TEKSTURSKARPHED:"},
@@ -311,6 +326,7 @@ const TxItem kTxDa[] = {
     {0,0} };
 
 const TxItem kTxFi[] = {
+    {47,"NÄKYVÄ"},{48,"PIILOSSA"},{82,"HAARNISKAN ULKONÄKÖ:"},{122,"Piilossa: Ratchet pitää tavallisen asunsa millä tahansa haarniskalla (se suojaa yhä)."},{83,"RIISU KYPÄRÄ:"},{123,"Anna Ratchetin hengittää vähän helpommin. Haarniska jää ja suojaa yhä."},
     {11,"IKKUNA"},{12,"REUNATON"},{13,"KOKONÄYTTÖ"},{14,"ALKUPERÄINEN"},{18,"RAJOITTAMATON"},{20,"YKSITYISKOHTAINEN"},{29,"OLETUS"},{30,"TERÄVÄMPI"},
     {31,"TERÄVIN"},{32,"VAKIO"},{33,"KORKEA"},{34,"ERITTÄIN KORKEA"},{35,"MATALA"},{36,"KESKITASO"},{42,"NÄPPÄIMISTÖ"},{43,"TÄYSI"},
     {61,"RESOLUUTIO:"},{62,"IKKUNATILA:"},{63,"KUVASUHDE:"},{64,"REUNANPEHMENNYS:"},{65,"ANISOTROPINEN:"},{66,"TEKSTUURIEN TERÄVYYS:"},

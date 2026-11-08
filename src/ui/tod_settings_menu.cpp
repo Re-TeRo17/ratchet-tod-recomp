@@ -107,6 +107,8 @@ const HRow kRowTab[] = {
     { "TOD_DS_TRIGGERS", 79, 119, 2, { NULL, "0" },                                      { 2, 1 },            0, 1 },
     { "TOD_DS_TRIGGER_STRENGTH", 80, 120, 4, { NULL, "75", "50", "25" },                 { 43, 44, 45, 46 },  0, 1 },
     { "TOD_DS_FIRE_R2",  81, 121, 2, { NULL, "0" },                                      { 2, 1 },            0, 1 },
+    { "TOD_ARMOR_LOOK",  82, 122, 2, { NULL, "hidden" },                                 { 47, 48 },          0, 1 },
+    { "TOD_REMOVE_HELMET", 83, 123, 2, { NULL, "1" },                                    { 1, 2 },            0, 1 },
 };
 const int kRows = (int)(sizeof kRowTab / sizeof kRowTab[0]);
 int s_idx[32];                                /* current choice of each row */
