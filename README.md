@@ -33,6 +33,8 @@ Direct3D 12, up to 4K and 60 fps.
 <a href="#reporting-bugs"><img src="docs/images/nav_report_bug.png" alt="Report a bug" width="250"></a>
 <a href="#support-the-project"><img src="docs/images/nav_support.png" alt="Support" width="250"></a>
 
+<a href="https://discord.gg/S4jd7643mg"><img src="docs/images/nav_discord_wide.png" alt="Join the Discord" width="758"></a>
+
 <sub><a href="#whats-new-in-121">What's new</a> | <a href="#screenshots">Screenshots</a> | <a href="#quick-start">Quick start</a> | <a href="#requirements">Requirements</a> | <a href="#controls">Controls</a> | <a href="#status">Status</a> | <a href="#roadmap">Roadmap</a> | <a href="docs/BUILDING.md">Building</a> | <a href="#supporters">Supporters</a> | <a href="#credits">Credits</a></sub>
 
 </div>
