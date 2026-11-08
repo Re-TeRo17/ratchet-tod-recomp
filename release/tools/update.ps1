@@ -6,7 +6,7 @@
 #>
 param([string]$Zip = '', [string]$Tag = '')
 $ErrorActionPreference = 'Stop'
-$ThisVersion = '1.2.0'
+$ThisVersion = '1.2.1'
 $root = Split-Path $PSScriptRoot -Parent
 $api = 'https://api.github.com/repos/Re-TeRo17/ratchet-tod-recomp/releases/latest'
 $page = 'https://github.com/Re-TeRo17/ratchet-tod-recomp/releases'
