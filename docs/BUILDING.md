@@ -10,7 +10,9 @@ build scripts. It does **not** contain any code or data generated from the game:
 folders `recompiled\` and `spu\`. You need your own copy of the disc (European release, BCES00052,
 v1.00) to build a working `tod.exe`.
 
-The released `tod.exe` is built the same way (plus the optional step 7 below).
+The released `tod.exe` is built the same way (plus the optional step 7 below). It also uses a PGO
+profile (`TOD_PGO_PROFILE`), the native SPU collision ring (`SPU_COLL_RING`) and the shipped
+`shaders\pipemap.bin`, which these steps alone do not reproduce.
 
 ## 1. Tools
 

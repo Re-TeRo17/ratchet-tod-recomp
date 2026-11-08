@@ -73,7 +73,7 @@ Each key can be set to 0 on its own if it causes trouble on your PC.
 
 ### Display
 
-- **Ultrawide (`TOD_ASPECT`, experimental) is now playable:** the HUD and the menus stay 16:9 in the
+- **Ultrawide (`TOD_ASPECT`, experimental):** the HUD and the menus stay 16:9 in the
   middle of the screen instead of being stretched ([#3](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/3)).
 - **Thin black bars:** the game draws its picture 704 lines high inside a 720-line frame, which leaves
   thin bars at the top and bottom. This is how the original PS3 game looks too (TVs usually hid them
@@ -113,6 +113,8 @@ Each key can be set to 0 on its own if it causes trouble on your PC.
 - If Windows gives the game less video memory (other programs using the GPU), a short stutter can still
   happen when a heavy scene starts.
 - The smoke of Clank's rocket boost can appear late the first time it is used.
+- Ultrawide (`TOD_ASPECT`): the 3D picture is stretched to the wide shape, because the wider field of view
+  does not apply yet (being fixed for 1.2.1).
 - CPUs without AVX2 (Intel 3rd gen and older) are still not supported
   ([#7](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/7),
   [#15](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/15)); the game says so at start.

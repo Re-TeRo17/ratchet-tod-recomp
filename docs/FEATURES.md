@@ -18,9 +18,9 @@
   beyond. It is independent of the window size.
 - Anti-aliasing: FXAA or MSAA x2 / x4 / x8. Anisotropic filtering up to 16x.
 - Display modes: windowed (any size), borderless window or exclusive fullscreen; VSync on or off.
-- Optional **ray-traced ambient occlusion** (DXR 1.1: RTX 20 / RX 6000 series or newer), with three
-  quality levels.
-- Optional screen-space reflections (off by default, expensive at 4K).
+- Optional, experimental **ray-traced ambient occlusion** (DXR 1.1: RTX 20 / RX 6000 series or newer),
+  with three quality levels.
+- Optional, experimental screen-space reflections (off by default, expensive at 4K).
 - True 4K for the 3D scene: the game's 960x704 scene render is no longer stretched 4/3 in width
   (`RSX_HSTRETCH_FIX`, on by default), so Ratchet and the world are as sharp as the rest of the image.
 - Character ground shadows restored and the shadow bias reworked (polygon offset in the vertex
@@ -34,16 +34,15 @@
 
 - A 60 fps target (`TOD_FPS`), with an optional cap above it.
 - Native fast paths for two of the game's heaviest SPU jobs (skeletal animation and collision
-  queries), so they run as plain native code instead of the lifted SPU version. In 1.0 the animation
-  evaluator and the collision code are faster, and 17 graphics job modules use a round-toward-zero
-  fast float path.
+  queries), so they run as plain native code instead of the lifted SPU version, and 17 graphics job
+  modules use a round-toward-zero fast float path.
 - Reference numbers for 1.2.0 (Ryzen 5 3600 + RTX 3070, 4K, MSAA x8). Each one is an automated
   3-minute fight with all the weapons, heavier than normal play:
 
   | Area | Average fps | Seconds at 59-60 fps |
   |---|---|---|
   | Cobalia | 59 | 85% |
-  | Rykan V | 57-58 | 56-66% |
+  | Rykan V | 57 | 56-61% |
   | Apogee Space Station | 57 | 60% |
   | Metropolis (busiest fights, ~3700 draws per frame) | 54 | 44% |
 
@@ -51,17 +50,17 @@
   higher: a 14-minute session at Sargasso averaged 59 fps with 88% of the seconds at 59-60, and a
   20-minute fight test at Rykan V 59 fps with 80%. Lowering the resolution helps the heaviest scenes
   little, because they are limited by the CPU.
-- In 1.0 the graphics command list is recorded on its own thread, and the vertex cache is large
-  enough for the busiest scenes (in Metropolis it used to be emptied every few frames, a hitch of
-  about 35 ms each time).
-- A pipeline (PSO) and shader cache in `cache\`: pipelines seen before are pre-built at start, to
-  avoid compile stutter. About 23% fewer shader pipelines need compiling in 1.0, so the first visit
-  to an area stutters less.
+- The graphics command list is recorded on its own thread and the draws of each frame are prepared
+  on three worker threads. The vertex cache is large enough for the busiest scenes (in 1.0 it was
+  emptied every few frames in Metropolis, a hitch of about 35 ms each time).
+- Shaders are built before you play: the download holds a map of the game's 1719 graphics pipelines
+  (`shaders\pipemap.bin`), built once on the first start and kept in `cache\`, so new areas do not
+  stutter the first time an effect appears. Pipelines seen while playing are added to the cache.
 - The hitch when the game autosaves is shorter (about 620 ms before, about 400 ms now).
-- New in 1.1: less stutter in busy scenes (the vertex cache no longer rebuilds in bursts), a faster
+- 1.1 added: less stutter in busy scenes (the vertex cache no longer rebuilds in bursts), a faster
   graphics thread (about 2.5 ms per frame in Metropolis), faster collision (about 1 ms per frame)
   and a profile-guided build of the graphics code. Each one can be turned off in `tod.ini`.
-- New in 1.2.0: the draws of each frame are prepared on three threads, the SPU collision jobs run on a
+- 1.2.0 added: the draws of each frame are prepared on three threads, the SPU collision jobs run on a
   native engine, render targets share memory blocks and offscreen passes no longer get an MSAA copy,
   frames follow the monitor's refresh, and the 1719 graphics pipelines are built before you play. See
   the [changelog](../CHANGELOG.md) for the measured numbers; `TOD_PERF_DEFAULTS=0` (environment variable)
@@ -103,10 +102,15 @@
 Both are switched on in `tod.ini` (next to `tod.exe`): remove the `#` at the start of the line and
 set the value, then restart the game (the mouse camera also from F1 > Controls, at once). They are not as well tested as the rest.
 
-- **Ultrawide**: `TOD_ASPECT = 21:9` (or `32:9`, or `auto` to take the shape of the window). The 3D
-  view widens (same vertical field of view, you see more at the sides). Set the window to the same
-  shape, e.g. `RSX_WINDOW = 3440x1440`, and use `RSX_SCALE` 2-3. Since 1.2.0 the HUD and the 2D menus
-  stay 16:9 in the middle of the screen; cutscenes stay 16:9 with bars.
+- **Ultrawide**: `TOD_ASPECT = 21:9` (or `32:9`, `43:18`, any `w:h` or ratio from 1.2 to 4, or `auto`).
+  Without it a wide screen shows the 16:9 picture with black bars at the sides (not stretched). With
+  it, in 1.2.0, the 3D picture is stretched to the wide shape: the wider field of view that should
+  show more at the sides does not apply yet, so the scene looks stretched (being fixed for 1.2.1). `auto` takes the shape of the screen in borderless and fullscreen mode, and of
+  `RSX_WINDOW` in windowed mode (1280x720 if unset, which is 16:9: nothing changes). For a 3440x1440
+  monitor use `TOD_ASPECT = auto` or `43:18` (21:9 leaves about 40 px of bar on each side).
+  `RSX_WINDOW` is used only in windowed mode. Use `RSX_SCALE` 2-3 (the horizontal resolution is
+  1280 x `RSX_SCALE`). Read at start-up only. Since 1.2.0 the HUD and the 2D menus stay 16:9 in the
+  middle of the screen; pre-rendered movies stay 16:9 with bars.
 - **Mouse camera**: `TOD_MOUSE = 1`, or F1 > Controls > Mouse camera. The mouse drives the right stick (camera and aim); left button =
   R1 (fire), right button = L1 (strafe / lock-on), middle button = Triangle (quick select), wheel =
   D-pad left/right, `Esc` = Start. `TOD_MOUSE_SENS` (default 1.0), `TOD_MOUSE_INVERT_Y` and

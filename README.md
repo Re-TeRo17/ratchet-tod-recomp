@@ -74,11 +74,11 @@ on 20 October 2026). The game is playable from the first planet onwards, but it 
   game renders its 3D scene at 960x704 and stretches it afterwards; in 1.0 that stretch is undone, so
   the scene is sharp at 4K instead of being enlarged by a third in width.
 - **A 60 fps target** (the original runs at 30 fps in many places). On a Ryzen 5 3600 + RTX 3070 at 4K
-  with MSAA x8, 1.2.0 averages 59 fps on Cobalia, 57-58 in fights on Rykan V and on the Apogee Space
+  with MSAA x8, 1.2.0 averages 59 fps on Cobalia, 57 in fights on Rykan V and on the Apogee Space
   Station, and 54 in the busiest fights in Metropolis (it was about 31 there in 1.0). Details:
   [Features: Performance](docs/FEATURES.md#performance) and [Known issues](#known-issues).
 - **Character ground shadows are back**, with reworked shadow bias. Optional **ray-traced ambient
-  occlusion** on DXR 1.1 graphics cards.
+  occlusion** (experimental) on DXR 1.1 graphics cards.
 - **In-game settings page** (F1, or hold SELECT on a controller): resolution, window mode, VSync, FPS
   limit, anti-aliasing, game language, button prompts, and a **Controls** tab to rebind every key and
   mouse button.
@@ -156,7 +156,7 @@ More detail in [Installing](#installing); your disc must be one of the
 | | |
 |---|---|
 | OS | Windows 10 or 11, 64-bit |
-| CPU | **AVX2 and FMA** (Intel Haswell / 4th gen Core or newer, any AMD Ryzen). On older CPUs the game shows a message at start saying the CPU is not supported. A fast 6+ core CPU matters most: the game's SPU code runs on your CPU cores. |
+| CPU | **AVX2, FMA and BMI1/BMI2** (Intel Haswell / 4th gen Core or newer, any AMD Ryzen). On older CPUs the game shows a message at start saying the CPU is not supported. A fast 6+ core CPU matters most: the game's SPU code runs on your CPU cores. |
 | GPU | Direct3D 12 (feature level 12_0). Optional ray-traced ambient occlusion needs DXR 1.1 (RTX 20 / RX 6000 or newer). 8 GB of video memory is comfortable at 1080p-1440p. |
 | RAM | 16 GB recommended |
 | Disk | About 24 GB free for the installed game files, plus a little for shader caches and saves |
@@ -250,9 +250,12 @@ Ally X with SteamOS and GE-Proton 11-12); they are not official support. See als
 ## Settings
 
 Edit `tod.ini` (every line is explained inside), or press **F1** in the game (on a controller: hold
-**SELECT** for two seconds) to open the settings page: internal resolution, window mode, VSync, FPS
-limit, anti-aliasing, anisotropic filtering, FPS counter, ray-traced ambient occlusion, the **game
-language**, and the button prompts (PlayStation 3/4/5, Xbox, Switch, keyboard). "Apply and save"
+**SELECT** for two seconds) to open the settings page (tabs): **Video** (internal resolution, window mode and size, VSync, FPS
+limit, anti-aliasing, anisotropic filtering, texture sharpness, shadow and bloom resolution, FPS
+counter, ray-traced ambient occlusion and screen-space reflections, both experimental), **System** (the
+**game language**, button prompts, saves folder, update check, DualSense and Xbox trigger options, the
+experimental teleport menu), **Cheats**, **Controls** (keyboard and mouse bindings, mouse camera),
+**Coming soon** (greyed placeholders) and **Credits**. "Apply and save"
 writes `tod.ini`; some rows apply at once, others ("requires restart") at the next start.
 
 Defaults of this release: 1080p internal resolution (`RSX_SCALE = 1.5`), MSAA x4, anisotropic x16,
@@ -264,9 +267,9 @@ The most used keys:
 |---|---|
 | `RSX_SCALE` | Internal resolution as a multiple of 1280x720: 1 = 720p, 1.5 = 1080p, 2 = 1440p, 3 = 4K (range 0.5 to 8). This is the biggest performance lever. |
 | `RSX_AA` | `off`, `fxaa`, `msaa2`, `msaa4`, `msaa8`. MSAA x8 at 4K is heavy and not recommended below an RTX 3080. |
-| `RSX_DISPLAY`, `RSX_WINDOW` | `windowed` (with a size such as `1920x1080`), `borderless`, `fullscreen`. |
+| `RSX_DISPLAY`, `RSX_WINDOW` | `windowed` (with a size such as `1920x1080`; `RSX_WINDOW` is used only in this mode), `borderless` (a window over the whole screen) or `fullscreen` (exclusive full screen). |
 | `RSX_VSYNC` | 1 = sync to the monitor (default), 0 = off. |
-| `TOD_FPS` | A cap (30, 60, 120...) or `lock60`. Above 60 VSync is switched off by itself and the physics uses a smaller time step. 60 is what the port is tuned for. |
+| `TOD_FPS` | A cap (10 to 1000: 30, 60, 120...) or `lock60`. Above 60 VSync is switched off by itself (unless `RSX_VSYNC` is set) and the physics uses a smaller time step. 60 is what the port is tuned for. |
 | `TOD_FPS_COUNTER` | 0 = off, 1 = FPS, 2 = detailed (FPS, frame time, 1% low of the last 5 s, GPU and CPU load, video memory). |
 | `PS3_LANG` | Game language (text, voices and subtitles), also in F1 > System. |
 
@@ -293,6 +296,8 @@ changed in **F1 > Controls** (Enter or click a row, then press the new key), and
 | L2 / R2 | `1` / `2` |
 | Start / Select | `Enter` / `Tab` |
 | Settings page | `F1` (controller: hold Select for 2 s) |
+| Detailed log mark | `F7`: puts a mark in `log\tod_v2_*.jsonl` at the moment something goes wrong |
+| Teleport menu | `F5`, only if switched on in F1 > System (experimental, for testing) |
 | Quit | the window's close button, `Alt+F4` or `Shift+Esc` (`Esc` alone does not quit) |
 
 ## Status
@@ -333,11 +338,9 @@ please [report it](#reporting-bugs).
   `AUDIO_LATENCY_MS` in `tod.ini` (for example to 48) may help.
 - **Water:** a few surfaces can be invisible or incomplete (for example the large round pool on
   Fastoon), and underwater can show as a flat colour.
-- **Shadows:** the character ground shadows are back in 1.0, but an occasional artefact can still
-  appear in some scenes. (Small plants and crates casting no shadow is how the PS3 original looks
+- **Shadows:** an occasional artefact can still appear in some scenes (the flicker of the shadows
+  of Ratchet, enemies and allies in long fights is fixed in 1.2.0). (Small plants and crates casting no shadow is how the PS3 original looks
   too.)
-- **Apogee holograms:** the platforms and lasers that vanished against the sky are fixed in 1.0. If
-  you still find one, please tell me where.
 - **Very long sessions:** a rare freeze has been reported after many hours of play. 1.2.0 fixes two
   causes of freezes (Intel hybrid CPUs, and the character animation job getting stuck); if it still
   happens to you, please send `log\tod.log` and `log\tod_v2_*.jsonl`. Saving now and then is a good
@@ -345,8 +348,9 @@ please [report it](#reporting-bugs).
 - **CPUs without AVX2** (Intel 3rd gen and older) are not supported yet
   ([#7](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/7),
   [#15](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/15)).
-- **Experimental options**, off by default: ultrawide (`TOD_ASPECT`: the 3D view widens, the
-  HUD and menus stay 16:9 in the middle and cutscenes stay 16:9) and the mouse camera (`TOD_MOUSE`: it
+- **Experimental options**, off by default: ultrawide (`TOD_ASPECT`: in 1.2.0 the 3D picture is still stretched to the wide shape, because the
+  wider field of view does not apply yet (being fixed for 1.2.1); the HUD and menus stay 16:9 in the middle,
+  pre-rendered movies stay 16:9 with bars) and the mouse camera (`TOD_MOUSE`: it
   drives the right stick, so its top speed is the game's Camera Speed option). See
   [Features](docs/FEATURES.md#experimental-options-off-by-default).
 - **Hardware not tested yet:** AMD and Intel GPUs. Reports are very welcome.
