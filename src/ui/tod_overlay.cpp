@@ -223,6 +223,14 @@ void init_rows()
           "Windowed mode only.",
           { { NULL, "1280x720" }, { "1600x900", "1600x900" }, { "1920x1080", "1920x1080" }, { "2560x1440", "2560x1440" } },
           0, true, TAB_VIDEO });
+    add({ "TOD_ASPECT", "Aspect ratio",
+          "For ultrawide screens: a wider view, the HUD and menus stay 16:9 in the middle. Auto = the shape of the screen (of the window size in windowed mode). Applies at the next launch.",
+          { { NULL, "16:9 (original)" }, { "21:9", "21:9" }, { "43:18", "3440x1440 (43:18)" }, { "32:9", "32:9" }, { "auto", "Auto" } },
+          0, false, TAB_VIDEO });
+    s_rows.back().experimental = true;
+    add({ "RSX_CROP_BARS", "Crop black bars",
+          "The game draws 704 lines inside a 720-line frame, as on the PS3 (TVs hid the thin bars at the top and bottom). On cuts them and stretches the picture 2.3% taller. Applies at the next launch.",
+          { { NULL, "Off" }, { "8", "On" } }, 0, false, TAB_VIDEO });
     add({ "RSX_VSYNC", "VSync", "Syncs presentation to the monitor. Off allows more fps than the refresh rate (with tearing).",
           { { "1", "On" }, { "0", "Off" } }, 0, true, TAB_VIDEO });
     add({ "TOD_FPS", "FPS limit",
@@ -342,6 +350,7 @@ void init_rows()
             { "Developed by Re-TeRo17", "github.com/Re-TeRo17/ratchet-tod-recomp", NULL },
             { "Fan project, not affiliated with Insomniac Games or Sony Interactive Entertainment", "All game content belongs to its owners; nothing of the game is included in this download.", NULL },
             { "7GP", "Thank you for supporting the project!", "Supporters" },
+            { "IS", "Thank you for supporting the project!", NULL },
             { "Support the project: buymeacoffee.com/tero17", "Support goes to the development work of the port.", NULL },
             { "ps3recomp by sp00nznet (fork by soyjxck) (MIT)", "The PS3 static recompilation runtime this port is built on.", "Thanks" },
             { "dod3-recomp by soyjxck and contributors (MIT)", "The Drakengard 3 recompilation this port is modelled on (boot path, guest memory, Dear ImGui setup).", NULL },
@@ -1518,26 +1527,35 @@ void fps_draw(float W, float k)
 /* 1.01: "a newer version is available", bottom-left for 25 s from the moment the check (update_check.cpp) says so. */
 double s_upd_until = -1;     /* -1: not shown yet; then the end of the notice */
 
+/* r121s: the notice shows 25 s after start anywhere, and all the time on the title screen / main menu (no level
+ * loaded) until the settings page has been opened once. */
+static bool s_upd_seen = false;
 bool update_notice_on(double t)
 {
+    if (s_upd_seen) return false;
     if (s_upd_until < 0) {
         if (tod_update_state() != 2) return false;
         s_upd_until = t + 25.0;
     }
-    return t < s_upd_until;
+    return t < s_upd_until || (tod_no_level_yet() && tod_hero_handle() == 0);
 }
 
 void update_notice_draw(float H, float k)
 {
-    char line[160];
-    snprintf(line, sizeof line, "Version %s of the port is available (this is %s). F1 > System > Updates", tod_update_latest(),
-             TOD_RELEASE_VERSION);
+    char l1[96], l2[160];
+    snprintf(l1, sizeof l1, "UPDATE AVAILABLE: version %s (you have %s)", tod_update_latest(), TOD_RELEASE_VERSION);
+    snprintf(l2, sizeof l2, "Close the game and run Update.bat in the game folder, or open F1 > System > Updates");
     ImDrawList* dl = ImGui::GetForegroundDrawList();
-    const float pad = 8.0f * k, margin = 14.0f * k;
-    const ImVec2 sz = ImGui::CalcTextSize(line);
-    const ImVec2 a(margin, H - margin - sz.y - 2 * pad), b(margin + sz.x + 2 * pad, H - margin);
-    dl->AddRectFilled(a, b, IM_COL32(0, 0, 0, 170), 6.0f * k);
-    dl->AddText(ImVec2(a.x + pad, a.y + pad), IM_COL32(140, 230, 140, 255), line);
+    ImFont* f = ImGui::GetFont();
+    const float s1 = ImGui::GetFontSize() * 1.45f, s2 = ImGui::GetFontSize() * 1.05f;
+    const ImVec2 z1 = f->CalcTextSizeA(s1, FLT_MAX, 0.0f, l1), z2 = f->CalcTextSizeA(s2, FLT_MAX, 0.0f, l2);
+    const float pad = 14.0f * k, gap = 6.0f * k, bw = std::max(z1.x, z2.x) + 2 * pad, bh = z1.y + gap + z2.y + 2 * pad;
+    const float W = ImGui::GetIO().DisplaySize.x;
+    (void)H; const ImVec2 a((W - bw) * 0.5f, 8.0f * k), b(a.x + bw, a.y + bh);   /* top centre, close to the edge: the main menu items sit at the bottom, the Options panel title just below */
+    dl->AddRectFilled(a, b, IM_COL32(10, 16, 28, 235), 8.0f * k);
+    dl->AddRect(a, b, IM_COL32(232, 140, 40, 255), 8.0f * k, 0, 2.0f * k);
+    dl->AddText(f, s1, ImVec2(a.x + (bw - z1.x) * 0.5f, a.y + pad), IM_COL32(255, 176, 64, 255), l1);
+    dl->AddText(f, s2, ImVec2(a.x + (bw - z2.x) * 0.5f, a.y + pad + z1.y + gap), IM_COL32(230, 230, 236, 255), l2);
 }
 
 /* 1.01: the port's version, bottom-right, while no level is loaded (title screen, main menu, loading).
@@ -1715,6 +1733,7 @@ void overlay_render(void* devp, void* queuep, void* listp, uint64_t rtv, unsigne
     io.DisplaySize = ImVec2((float)w, (float)h);
     if (s_open.load()) init_rows();
     if (s_open.load() && s_want_toggle.exchange(false)) {          /* just opened */
+        if (tod_update_state() == 2) s_upd_seen = true;   /* r121s: the notice has done its job */
         refresh_rows();
         controls_refresh();   /* keys136 */
         s_sel = 0;

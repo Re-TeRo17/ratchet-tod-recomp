@@ -80,3 +80,7 @@ desktop.ini
 
 # Editor/OS leftovers and accidental folders
 Users*/
+
+# 1.2.1: the Options page script (rewrite of the game's Lua Options handler) and its compiled form stay out, as in 1.2.0
+src/patches/menu_opt_handler.inc
+tools/menu/lua/

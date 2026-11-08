@@ -9,7 +9,7 @@
  */
 #pragma once
 
-#define TOD_RELEASE_VERSION "1.2.0"
+#define TOD_RELEASE_VERSION "1.2.1"
 #define TOD_RELEASES_URL "https://github.com/Re-TeRo17/ratchet-tod-recomp/releases"
 
 #ifdef __cplusplus

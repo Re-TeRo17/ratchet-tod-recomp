@@ -25,6 +25,7 @@
 #include <filesystem>
 
 extern "C" int ps3_mods_init(const char* mods_dir, const char* vfs_root);   /* runtime/syscalls/sys_fs.c */
+extern "C" void tod_menu_archive_ensure(const char* mods_dir);   /* src/patches/menu_archive.cpp */
 
 #ifdef _WIN32
 #  include "win32_compat.h"
@@ -52,6 +53,24 @@ extern "C" void tod_mods_init(void)
     }
 #endif
     if (dir.empty() && fs::is_directory("mods", ec)) dir = fs::absolute("mods", ec).string();
+    /* 1.2.1: the patched Options archive is made here, before the folder is indexed (TOD_MENU=0: nothing).
+     * No folder yet: it is created next to tod.exe, but only once the archive is really written. */
+    {
+        const char* mn = getenv("TOD_MENU");
+        if (!(mn && !strcmp(mn, "0"))) {
+            std::string target = dir;
+#ifdef _WIN32
+            if (target.empty()) {
+                wchar_t exe[1024];
+                const DWORD n = GetModuleFileNameW(NULL, exe, 1024);
+                if (n > 0 && n < 1024) target = (fs::path(exe).parent_path() / "mods").string();
+            }
+#endif
+            if (target.empty()) target = fs::absolute("mods", ec).string();
+            tod_menu_archive_ensure(target.c_str());
+            if (dir.empty() && fs::is_directory(target, ec)) dir = target;
+        }
+    }
     if (dir.empty()) return;
 
     ps3_mods_init(dir.c_str(), getenv("PS3_VFS_ROOT"));

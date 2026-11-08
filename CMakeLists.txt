@@ -63,6 +63,18 @@ if(TOD_COLL_SYNC AND EXISTS "${RECOMP_DIR}/ppu_recomp_002.cpp")
     coll_sync_ppu_patch("${RECOMP_DIR}/ppu_recomp_002.cpp" "${CMAKE_BINARY_DIR}/gen/ppu/ppu_recomp_002.cpp" COLL_SYNC_PPU_002)
     list(TRANSFORM RECOMP_SOURCES REPLACE "^${RECOMP_DIR}/ppu_recomp_002.cpp$" "${COLL_SYNC_PPU_002}")
 endif()
+# r121u: TOD_ASPECT Hor+ hook on the frustum builder (func_00597328) in ppu_recomp_002.cpp (on top of the coll_sync copy if any)
+set(_P002 "")
+foreach(_s IN LISTS RECOMP_SOURCES)
+    if(_s MATCHES "ppu_recomp_002[.]cpp$")
+        set(_P002 "${_s}")
+    endif()
+endforeach()
+if(_P002)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/tools/aspect_proj_ppu_patch.cmake")
+    aspect_proj_ppu_patch("${_P002}" "${CMAKE_BINARY_DIR}/gen/ppu_aspect/ppu_recomp_002.cpp" ASPECT_PROJ_PPU_002)
+    list(TRANSFORM RECOMP_SOURCES REPLACE "^${_P002}$" "${ASPECT_PROJ_PPU_002}")
+endif()
 # wide120: hook on the UI pixel transform (func_00660CD8, patched copy of ppu_recomp_003.cpp in build/gen/ppu); TOD_ASPECT_UI at run time
 if(EXISTS "${RECOMP_DIR}/ppu_recomp_003.cpp")
     include("${CMAKE_CURRENT_SOURCE_DIR}/tools/ui_xform_ppu_patch.cmake")
@@ -196,6 +208,7 @@ set(PORT_SOURCES
     src/stubs/missing_hle.cpp
     src/stubs/lua_eh.cpp
     src/stubs/ui_xform.cpp           # wide120: func_00660CD8 (HUD pixel transform) for TOD_ASPECT_UI
+    src/stubs/aspect_hor.cpp         # r121u: TOD_ASPECT Hor+ (render camera FOV)
     src/kernel/edgezlib_native.cpp
     src/input/host_input.cpp
     src/input/key_bindings.cpp       # keyboard / mouse bindings (KEY_* in tod.ini, F1 page Controls tab)
@@ -206,6 +219,7 @@ set(PORT_SOURCES
     src/patches/prompts.cpp          # button prompts in the pad's own glyphs
     src/patches/sixaxis_default.cpp  # SIXAXIS off by default (TOD_SIXAXIS)
     src/patches/level_streams.cpp
+    src/patches/menu_archive.cpp     # patched Options archive built at start (TOD_MENU)
     src/patches/mods.cpp             # mods\ folder: files read instead of the game's (TOD_MODS)
     src/ui/tod_overlay.cpp           # F1 / SELECT held settings page (Dear ImGui over the D3D12 present)
     src/ui/tod_logv2_host.cpp        # logv2: host fields of the structured log (CPU/GPU/RAM, threads, position, F7 mark)

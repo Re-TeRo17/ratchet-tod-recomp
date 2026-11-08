@@ -1339,6 +1339,7 @@ static void fps_setup_argv(void)
  * -----------------------------------------------------------------------*/
 #define TOD_A_ASPECT_16_9 0x8A73FCu
 extern "C" void rsx_present_set_frame_shape(float aspect);
+extern "C" void tod_aspect_hor_install(float aspect);   /* src/stubs/aspect_hor.cpp */
 static float g_tod_aspect = 0.0f;       /* 0 = off */
 extern "C" float g_tod_ui_k = 1.0f;     /* TOD_ASPECT_UI: the HUD's width as a fraction of the frame ((16/9)/aspect), 1 = off; read by src/stubs/ui_xform.cpp */
 static bool parse_ratio(const char* s, float* out)
@@ -1375,19 +1376,21 @@ static void aspect_setup(void)
     if (fabsf(a - 16.0f / 9.0f) < 0.01f) { fprintf(stderr, "[aspect] TOD_ASPECT=%s is 16:9: nothing changed\n", e); return; }
     g_tod_aspect = a;
 }
-/* After ppu_load_elf, before any guest code: the game's 16/9 constant becomes the chosen ratio. */
+/* After ppu_load_elf, before any guest code: the present takes the chosen shape and the HUD transform is set. The game's own 16/9
+ * constant (0x8A73FC) is no longer changed (r121u): it does not reach the 3D projection (Hor+ is done at the frustum builder,
+ * src/stubs/aspect_hor.cpp) and the game's UI lays itself out from it; TOD_ASPECT_CONST=1 writes it as in 1.2.0 (comparison). */
 static void aspect_patch_guest(void)
 {
     if (g_tod_aspect <= 0.0f) return;
     uint32_t w; memcpy(&w, &g_tod_aspect, 4);
-    vm_write32(TOD_A_ASPECT_16_9, w);
+    { const char* c = getenv("TOD_ASPECT_CONST"); if (c && c[0] == '1') vm_write32(TOD_A_ASPECT_16_9, w); }
     rsx_present_set_frame_shape(g_tod_aspect);
     { /* TOD_ASPECT_UI (default 1 with TOD_ASPECT): the HUD stays 16:9 in the middle of the wide frame (src/stubs/ui_xform.cpp); 0 = it is stretched with the frame */
         const char* u = getenv("TOD_ASPECT_UI");
         if (!(u && u[0] == '0')) g_tod_ui_k = (16.0f / 9.0f) / g_tod_aspect;
         fprintf(stderr, "[aspect] TOD_ASPECT_UI=%s -> HUD k=%.4f\n", u ? u : "(default 1)", (double)g_tod_ui_k);
     }
-    fprintf(stderr, "[aspect] TOD_ASPECT=%s -> %.4f (guest 0x%08X = 0x%08X, present stretched to that shape)\n", getenv("TOD_ASPECT"), g_tod_aspect, TOD_A_ASPECT_16_9, w);
+    fprintf(stderr, "[aspect] TOD_ASPECT=%s -> %.4f (frame shown at that shape; 3D view widened at the camera, src/stubs/aspect_hor.cpp)\n", getenv("TOD_ASPECT"), (double)g_tod_aspect);
 }
 
 /* After ppu_load_elf: the dt floor for n > 75 (big-endian float 1/n). */
@@ -2117,6 +2120,7 @@ int main(int argc, char** argv)
     }
 
     ppu_recomp_register();   /* lifted function table -> address map */
+    if (g_tod_aspect > 0.0f) tod_aspect_hor_install(g_tod_aspect);   /* TOD_ASPECT: widen the render camera (src/stubs/aspect_hor.cpp) */
     ps3_load_prx_modules();  /* the port's own HLE (the six imports the runtime lacks) */
     ppu_hle_init();          /* firmware import NID -> HLE handlers */
     ppu_sysprx_register();   /* boot-critical CRT */
