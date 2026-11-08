@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.2.1 (8 November 2026)
+
+**Real ultrawide and the PC settings in the game's own Options menu.** Unzip it over 1.2.0 (or run
+`Update.bat`): your settings and saves are kept.
+
+### Display
+
+- **Real ultrawide (`TOD_ASPECT`, or F1 > Video > Aspect ratio):** at 21:9, 3440x1440 (43:18) and 32:9 the
+  game now shows a wider view, with the same vertical field of view as 16:9, instead of stretching the 16:9
+  picture ([#3](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/3)). The HUD, the weapon wheel and
+  the menus stay 16:9 in the middle; the pause menu background covers the whole screen. `auto` uses the
+  shape of the screen (of the window in windowed mode).
+- **Crop black bars** is now in F1 > Video (it was only in `tod.ini` in 1.2.0)
+  ([#12](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/12)).
+
+### Other
+
+- **PC settings in the game's Options menu, with no extra tools:** on the first start the game prepares
+  the menu from your own copy of the game (about half a second, once; the original files are never
+  changed). The rows (resolution, window mode, anti-aliasing, shadows, ray-traced AO, VSync and more)
+  appear in Options from the main menu and from the pause menu. `TOD_MENU = 0` in `tod.ini` turns it off.
+- **New version notice:** a bigger panel at the top of the screen, which stays on the main menu until you
+  open the F1 page.
+- Credits: thanks to our new supporter.
+
 ## 1.2.0 (7 November 2026)
 
 **Faster, steadier, and no more freezes on Intel hybrid CPUs.** 1.2.0 spreads the renderer's work over

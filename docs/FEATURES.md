@@ -103,14 +103,14 @@ Both are switched on in `tod.ini` (next to `tod.exe`): remove the `#` at the sta
 set the value, then restart the game (the mouse camera also from F1 > Controls, at once). They are not as well tested as the rest.
 
 - **Ultrawide**: `TOD_ASPECT = 21:9` (or `32:9`, `43:18`, any `w:h` or ratio from 1.2 to 4, or `auto`).
-  Without it a wide screen shows the 16:9 picture with black bars at the sides (not stretched). With
-  it, in 1.2.0, the 3D picture is stretched to the wide shape: the wider field of view that should
-  show more at the sides does not apply yet, so the scene looks stretched (being fixed for 1.2.1). `auto` takes the shape of the screen in borderless and fullscreen mode, and of
+  Also in F1 > Video > Aspect ratio. Without it a wide screen shows the 16:9 picture with black bars at
+  the sides (not stretched). With it (since 1.2.1) the game shows a wider view: the same vertical field
+  of view as 16:9, more of the scene at the sides, nothing stretched. `auto` takes the shape of the screen in borderless and fullscreen mode, and of
   `RSX_WINDOW` in windowed mode (1280x720 if unset, which is 16:9: nothing changes). For a 3440x1440
   monitor use `TOD_ASPECT = auto` or `43:18` (21:9 leaves about 40 px of bar on each side).
   `RSX_WINDOW` is used only in windowed mode. Use `RSX_SCALE` 2-3 (the horizontal resolution is
-  1280 x `RSX_SCALE`). Read at start-up only. Since 1.2.0 the HUD and the 2D menus stay 16:9 in the
-  middle of the screen; pre-rendered movies stay 16:9 with bars.
+  1280 x `RSX_SCALE`). Read at start-up only. The HUD, the weapon wheel and the menus stay 16:9 in the
+  middle of the screen (the pause menu background covers the whole width); pre-rendered movies stay 16:9 with bars.
 - **Mouse camera**: `TOD_MOUSE = 1`, or F1 > Controls > Mouse camera. The mouse drives the right stick (camera and aim); left button =
   R1 (fire), right button = L1 (strafe / lock-on), middle button = Triangle (quick select), wheel =
   D-pad left/right, `Esc` = Start. `TOD_MOUSE_SENS` (default 1.0), `TOD_MOUSE_INVERT_Y` and
@@ -118,6 +118,12 @@ set the value, then restart the game (the mouse camera also from F1 > Controls, 
   the game's own Camera Speed option: raise it in the game's Options. F1 releases the cursor.
 
 ## Saves, language and installation
+
+- **PC settings in the game's Options menu (1.2.1):** on the first start the game prepares the menu
+  from your own copy of the game (about half a second, once; the copies go in `mods\`, the original files
+  are never changed). The port's rows (resolution, window mode, aspect ratio, anti-aliasing, shadows,
+  ray-traced AO, VSync and more, translated) then appear in Options, from the main menu and from the
+  pause menu. `TOD_MENU = 0` in `tod.ini` turns it off. The F1 page has the same settings and more.
 
 - **Save slot list (1.1):** saving and loading show the game's slot list, so you choose the slot.
   `TOD_SAVE_PICKER = 0` turns the list off: then loading picks your newest save and a manual save

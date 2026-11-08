@@ -38,7 +38,7 @@ borderless window, VSync on, 60 fps target, English.
 | `RSX_SHADOW_SCALE` | Resolution multiplier of the per-object shadow maps, on top of the internal resolution: 1, 2 (default, "High") or 4. F1 > Video; applies at the next start. |
 | `RSX_BLOOM_SCALE` | The same for the bloom blur chain: 1, 2 (default) or 4. Applies at the next start. |
 | `RSX_TEX_LOD_BIAS` | Texture sharpness: 0 (default), -0.5 or -1. Negative values pick sharper detail levels (more shimmer on fine patterns). Applies at the next start. |
-| `TOD_ASPECT` | Experimental ultrawide, off by default (16:9): `21:9`, `32:9`, `43:18`, `<w>:<h>`, a ratio (1.2 to 4) or `auto`. See [Features](FEATURES.md#experimental-options-off-by-default). Read at start-up only. |
+| `TOD_ASPECT` | Ultrawide (a wider view, since 1.2.1), off by default (16:9); also F1 > Video > Aspect ratio: `21:9`, `32:9`, `43:18`, `<w>:<h>`, a ratio (1.2 to 4) or `auto`. See [Features](FEATURES.md#experimental-options-off-by-default). Read at start-up only. |
 | `TOD_PROMPTS` | Button icons: `auto` (follows the last used device), `ps3`, `ps4`, `ps5`, `xbox`, `switch`, `keyboard`. |
 | `PS3_LANG` | Game language, see below. |
 | `AUDIO_LATENCY_MS`, `AUDIO_LOWLAT` | Audio safety margin (default 32 ms) and the experimental low-latency output (default off, the stable choice). |
