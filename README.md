@@ -15,6 +15,7 @@ Direct3D 12, up to 4K and 60 fps.
 
 [![Get it on RecompLauncher](https://recomplauncher.com/assets/press/launcher/badge-dark.svg)](https://recomplauncher.com/game/ratchet-tod-recomp)
 [![Verified developer on RecompStore](https://recompstore.com/assets/press/verified-dark.svg)](https://recompstore.com/dev/re-tero17)
+[![Follow @Re_TeRo17 on X](https://img.shields.io/badge/follow-%40Re__TeRo17-black?logo=x)](https://x.com/Re_TeRo17)
 
 <img src="docs/screenshots/01_metropolis_kerwan.jpg" alt="Metropolis, Kerwan, running natively on PC at 4K" width="100%">
 
@@ -30,7 +31,7 @@ Direct3D 12, up to 4K and 60 fps.
 <a href="#reporting-bugs"><img src="docs/images/nav_report_bug.png" alt="Report a bug" width="250"></a>
 <a href="#support-the-project"><img src="docs/images/nav_support.png" alt="Support" width="250"></a>
 
-<sub><a href="#whats-new-in-120">What's new</a> | <a href="#screenshots">Screenshots</a> | <a href="#quick-start">Quick start</a> | <a href="#requirements">Requirements</a> | <a href="#controls">Controls</a> | <a href="#status">Status</a> | <a href="#roadmap">Roadmap</a> | <a href="docs/BUILDING.md">Building</a> | <a href="#supporters">Supporters</a> | <a href="#credits">Credits</a></sub>
+<sub><a href="#whats-new-in-121">What's new</a> | <a href="#screenshots">Screenshots</a> | <a href="#quick-start">Quick start</a> | <a href="#requirements">Requirements</a> | <a href="#controls">Controls</a> | <a href="#status">Status</a> | <a href="#roadmap">Roadmap</a> | <a href="docs/BUILDING.md">Building</a> | <a href="#supporters">Supporters</a> | <a href="#credits">Credits</a></sub>
 
 </div>
 
@@ -414,6 +415,7 @@ entirely optional: the port is and stays free.
 
 <a href="https://buymeacoffee.com/tero17"><img src="docs/images/support_coffee.png" alt="Buy me a coffee" width="300"></a>
 
+- News and updates: [@Re_TeRo17 on X](https://x.com/Re_TeRo17)
 - Bugs and questions: [GitHub Issues](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues)
 - Downloads: [Releases](https://github.com/Re-TeRo17/ratchet-tod-recomp/releases)
 - Build it yourself: [docs/BUILDING.md](docs/BUILDING.md)
