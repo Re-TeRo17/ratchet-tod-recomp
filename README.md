@@ -47,8 +47,8 @@ graphics by Direct3D 12. There is no emulation at run time.
 **Nothing of the game is in this download.** You need your own copy of the game (the disc). The
 installer takes it from there.
 
-**Version 1.2.1 is out** (8 November 2026): real ultrawide and the PC settings in the game's own
-Options menu. See the [changelog](CHANGELOG.md). Thank you to the project's [supporters](#supporters)!
+**Version 1.2.1 is out** (8 November 2026): real ultrawide, the PC settings in the game's own
+Options menu, armor and helmet options and Kreeli Comet's fog fixed. See the [changelog](CHANGELOG.md). Thank you to the project's [supporters](#supporters)!
 Version 1.2.0 (7 November 2026) made the frame rate much steadier. Version 1.1 (4 November 2026) added a save slot list and the
 missing level voices. Version 1.0 was the first public release (2 November 2026; development started
 on 20 October 2026). The game is playable from the first planet onwards, but it is not finished: see
@@ -353,6 +353,7 @@ please [report it](#reporting-bugs).
   short stutter can happen when a heavy scene starts.
 - **Weapon vendor and weapons menu:** they flicker briefly every 1.5 seconds (being worked on).
 - **Clank's rocket boost:** its smoke can appear late the first time it is used.
+- **Clank on Ratchet's back** may disappear for a moment at some camera angles (being looked at).
 - **Short pauses** on autosave (about 0.4 s, down from 0.6 s) and while a level or a cutscene loads.
 - **Audio:** an occasional short crackle, mostly while the frame rate dips or an area loads. Raising
   `AUDIO_LATENCY_MS` in `tod.ini` (for example to 48) may help.
