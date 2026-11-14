@@ -30,5 +30,6 @@ Attach `log\tod.log` from right after the problem (before starting the game agai
 If the game crashed or froze, the last lines are the most useful part.
 Also attach the newest `log\tod_v2_<date>.jsonl` (the detailed log: press **F7** in game at the moment something goes wrong to mark it)
 and, if the game crashed, `log\tod_crash.txt`.
+GitHub does not accept `.ini` and `.jsonl` files: put all of them in one `.zip` (right-click → *Compress to ZIP file*) and attach the zip.
 
 Do not attach game files, disc images or other people's save data.

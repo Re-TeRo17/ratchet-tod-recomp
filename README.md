@@ -413,6 +413,8 @@ of this you include, the faster it can be fixed:
    previous run is kept as `log\tod.previous.log`). If the game crashed or froze, the last lines are
    the most useful part. Also attach `log\tod_v2_<date>.jsonl` (the detailed log: press **F7** in game
    at the moment something goes wrong to mark it) and, if the game crashed, `log\tod_crash.txt`.
+   GitHub does not accept `.ini` and `.jsonl` files: put all of them in one `.zip` (right-click →
+   *Compress to ZIP file*) and attach the zip.
 
 Do **not** attach game files, disc images or saves from other people. A `gamedata\...\savedata`
 folder is fine if it is your own and the bug depends on it.
