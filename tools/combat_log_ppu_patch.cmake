@@ -1,0 +1,50 @@
+# combat_log_ppu_patch.cmake (10/11) -- hook on the game's "deliver a damage record" function (TOD_COMBAT_LOG).
+#
+#   combat_log_ppu_patch(<ppu_recomp_000.cpp in> <patched output file> <out var>)
+#
+# Renames the definition `void func_000BAE18(ppu_context* ctx) {` (r3 = target entity, r4 = damage record) to
+# func_000BAE18_lifted; src/stubs/combat_log.cpp provides func_000BAE18 (reads the target's health before and after).
+# Callers, the function table and trampolines keep calling func_000BAE18. Rewritten only when the content changes.
+function(combat_log_ppu_patch orig outc outvar)
+    file(READ "${orig}" txt)
+    set(def "void func_000BAE18(ppu_context* ctx) {\n")
+    string(FIND "${txt}" "${def}" dpos)
+    if(dpos LESS 0)
+        message(FATAL_ERROR "combat_log_ppu_patch: ${orig}: definition of func_000BAE18 not found")
+    endif()
+    string(REPLACE "${def}" "void func_000BAE18_lifted(ppu_context* ctx) {\n" txt "${txt}")
+    get_filename_component(outdir "${outc}" DIRECTORY)
+    file(MAKE_DIRECTORY "${outdir}")
+    set(old "")
+    if(EXISTS "${outc}")
+        file(READ "${outc}" old)
+    endif()
+    if(NOT old STREQUAL txt)
+        file(WRITE "${outc}" "${txt}")
+    endif()
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${orig}" "${CMAKE_CURRENT_FUNCTION_LIST_FILE}")
+    set(${outvar} "${outc}" PARENT_SCOPE)
+endfunction()
+
+# tod_lift_rename(<in> <out> <func address, e.g. 00462F38> <out var>) (11/11): rename one lifted definition to <func>_lifted
+# (the port provides the function and calls the lifted one). Same rules as above.
+function(tod_lift_rename orig outc fn outvar)
+    file(READ "${orig}" txt)
+    set(def "void func_${fn}(ppu_context* ctx) {\n")
+    string(FIND "${txt}" "${def}" dpos)
+    if(dpos LESS 0)
+        message(FATAL_ERROR "tod_lift_rename: ${orig}: definition of func_${fn} not found")
+    endif()
+    string(REPLACE "${def}" "void func_${fn}_lifted(ppu_context* ctx) {\n" txt "${txt}")
+    get_filename_component(outdir "${outc}" DIRECTORY)
+    file(MAKE_DIRECTORY "${outdir}")
+    set(old "")
+    if(EXISTS "${outc}")
+        file(READ "${outc}" old)
+    endif()
+    if(NOT old STREQUAL txt)
+        file(WRITE "${outc}" "${txt}")
+    endif()
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${orig}" "${CMAKE_CURRENT_FUNCTION_LIST_FILE}")
+    set(${outvar} "${outc}" PARENT_SCOPE)
+endfunction()

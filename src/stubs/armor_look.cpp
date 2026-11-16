@@ -48,7 +48,48 @@ void func_001E2110(ppu_context* ctx)
 {
     const uint32_t ret = (uint32_t)ctx->lr;
     func_001E2110_lifted(ctx);
+    { /* TOD_ARMOR_LOOK_FORCE=1..4 (debug, 09/11): the look of that armor whatever is equipped (Clank tests with an armored Ratchet
+       * on a level loaded with -level, where the save's inventory is not used). Look only: protection and saves are unchanged. */
+      static int f = -1;
+      if (f < 0) { const char* e = getenv("TOD_ARMOR_LOOK_FORCE"); f = e ? atoi(e) : 0; if (f < 0 || f > 4) f = 0;
+                   if (f) fprintf(stderr, "[armor] TOD_ARMOR_LOOK_FORCE=%d (debug: armor look forced)\n", f); }
+      if (f && ret == 0x001E4D24u) ctx->gpr[3] = (uint64_t)f; }
     if (ret == 0x001E4D24u && ctx->gpr[3] != 0 && armor_hidden()) ctx->gpr[3] = 0;
+}
+
+/* barefoot (09/11): the hero's visible mesh groups, a 64-bit mask at moby+0x118 built by func_001E4CC0 from the
+ * model's group table ([[moby+0x54]+0x6C], one byte per role: +0x3 head, +0x28..+0x2D the whole-body cheat skins, ...).
+ * TOD_MESH_LOG=1 prints the table once and every new mask; TOD_MESH_SHOW / TOD_MESH_HIDE = "g,g,..." (group numbers) add /
+ * remove groups (tests). */
+static uint64_t parse_groups(const char* e)
+{
+    uint64_t m = 0;
+    while (e && *e) { const int g = atoi(e); if (g >= 0 && g < 64) m |= 1ull << g; e = strchr(e, ','); if (e) e++; }
+    return m;
+}
+
+uint64_t tod_hero_mesh_mask(uint32_t moby, uint64_t mask)
+{
+    static int n, logon = -1; static uint64_t show, hide, last = ~0ull;
+    if (logon < 0) { const char* e = getenv("TOD_MESH_LOG"); logon = e && e[0] == '1'; }
+    if (n-- <= 0) { n = 30; show = parse_groups(getenv("TOD_MESH_SHOW")); hide = parse_groups(getenv("TOD_MESH_HIDE")); }
+    if (logon && mask != last) {
+        last = mask;
+        const uint32_t cls = vm_read32(moby + 0x54), tab = cls ? vm_read32(cls + 0x6C) : 0;
+        char t[200] = ""; size_t k = 0;
+        for (int i = 0; tab && i < 0x30 && k + 4 < sizeof t; i++) k += (size_t)snprintf(t + k, sizeof t - k, "%02X ", vm_read8(tab + (uint32_t)i));
+        fprintf(stderr, "[mesh] hero %08X mask %016llX (show %llX hide %llX) table: %s\n", moby, (unsigned long long)mask,
+                (unsigned long long)show, (unsigned long long)hide, t);
+    }
+    { /* TOD_BAREFOOT=1 (09/11): with the suit body (group 1) the striped skin's body (group 47) is drawn too; the renderer
+       * keeps only its feet and drops the suit's boots (rsx_draw_engine.c eng_barefoot). Only the suit, no armor (the user's choice, 09/11). Read ONCE, like the renderer does
+       * (its filter is baked into the vertex cache): turned on mid-game it would show the whole striped body; the option is
+       * "at the next start" in the menus. */
+      static int bf = -1;
+      if (bf < 0) { const char* e = getenv("TOD_BAREFOOT"); bf = e && e[0] == '1'; fprintf(stderr, "[armor] barefoot: %s\n", bf ? "on" : "off"); }
+      if (bf && (mask & 2ull)) mask |= 1ull << 47;
+    }
+    return (mask | show) & ~hide;
 }
 
 /* the head-group read in func_001E4CC0: r9 = byte hero+0x21CD */

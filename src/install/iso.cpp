@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <cerrno>
 #include <cstring>
 #include <fstream>
 #include <memory>
@@ -25,7 +26,7 @@ static std::string utf8_generic(const fs::path& p)
 
 std::string sha256_file(const fs::path& p)
 {
-    std::ifstream f(p, std::ios::binary);
+    std::ifstream f(todsetup::long_path(p), std::ios::binary);
     if (!f) return "";
     Sha256 s;
     std::unique_ptr<char[]> buf(new char[1 << 20]);
@@ -49,8 +50,8 @@ bool param_sfo(const std::vector<uint8_t>& d, std::string* title_id, std::string
     for (uint32_t i = 0; i < n; i++) {
         const size_t e = 20 + (size_t)i * 16;
         const uint32_t ko = le16(e), len = le32(e + 4), dof = le32(e + 12);
-        if (kt + ko >= d.size() || (uint64_t)dt + dof + len > d.size()) continue;
-        const char* key = (const char*)&d[kt + ko];
+        if ((uint64_t)kt + ko + 9 > d.size() || (uint64_t)dt + dof + len > d.size()) continue;   /* the key compares read 9 bytes */
+        const char* key = (const char*)&d[(size_t)kt + ko];
         std::string val((const char*)&d[dt + dof], len);
         val = val.c_str();                                   /* to the first NUL */
         if (!strncmp(key, "TITLE_ID", 9) && title_id) *title_id = val;
@@ -115,11 +116,29 @@ std::string iso_name(const uint8_t* p, size_t n, bool joliet)
     return s;
 }
 
+/* A name read from the image becomes part of a path written under the install folder: only a plain file or folder name is
+ * accepted (no "." / "..", no separators, drive colons or control characters), so a crafted image cannot place a file outside it. */
+bool safe_name(const std::string& s)
+{
+    if (s.empty() || s == "." || s == "..") return false;
+    for (unsigned char c : s)
+        if (c < 0x20 || c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|')
+            return false;
+    return true;
+}
+
+constexpr uint32_t kMaxDirBytes = 16u << 20;     /* a directory's records; the game's largest is a few sectors */
+constexpr size_t kMaxFiles = 200000;             /* the disc has ~1500 files */
+
 bool walk(Iso& iso, uint32_t lba, uint32_t len, const std::string& prefix, bool joliet, std::vector<DiscFile>* out,
           int depth, std::string* err)
 {
     if (depth > 32) {
         *err = "the disc image's folders nest too deep (not an ISO 9660 image?)";
+        return false;
+    }
+    if (len > kMaxDirBytes || out->size() > kMaxFiles) {
+        *err = "the disc image's folder table is not valid (not an ISO 9660 image?)";
         return false;
     }
     std::vector<uint8_t> dir(len);
@@ -141,7 +160,15 @@ bool walk(Iso& iso, uint32_t lba, uint32_t len, const std::string& prefix, bool 
         const uint8_t flags = r[25], nl = r[32];
         o += rl;
         if (nl == 1 && (r[33] == 0 || r[33] == 1)) continue;            /* . and .. */
+        if (33u + nl > rl) {
+            *err = "the disc image has a broken folder record";
+            return false;
+        }
         const std::string name = iso_name(r + 33, nl, joliet);
+        if (!safe_name(name)) {
+            *err = "the disc image has a file with a name that is not allowed: " + (prefix.empty() ? name : prefix + "/" + name);
+            return false;
+        }
         const std::string path = prefix.empty() ? name : prefix + "/" + name;
         if (flags & 0x02) {
             if (!walk(iso, ext, size, path, joliet, out, depth + 1, err)) return false;
@@ -217,9 +244,10 @@ bool list_iso(const fs::path& p, std::vector<DiscFile>* files, std::string* err)
 bool list_folder(const fs::path& p, std::vector<DiscFile>* files, std::string* err)
 {
     std::error_code ec;
-    for (fs::recursive_directory_iterator it(p, ec), end; it != end && !ec; it.increment(ec)) {
+    const fs::path lp = todsetup::long_path(p);   /* issue #20: a disc folder deep in the user's folders */
+    for (fs::recursive_directory_iterator it(lp, ec), end; it != end && !ec; it.increment(ec)) {
         if (!it->is_regular_file(ec)) continue;
-        const std::string rel = utf8_generic(fs::relative(it->path(), p, ec));
+        const std::string rel = utf8_generic(it->path().lexically_relative(lp));
         files->push_back({ rel, 0, (uint64_t)it->file_size(ec) });
     }
     if (ec) {
@@ -283,7 +311,7 @@ bool read_disc_file(const Disc& disc, const std::string& path, std::vector<uint8
         in.read((char*)out->data(), (std::streamsize)f->size);
         return (uint64_t)in.gcount() == f->size;
     }
-    std::ifstream in(disc.source / todsetup::from_utf8(f->path), std::ios::binary);
+    std::ifstream in(todsetup::long_path(disc.source / todsetup::from_utf8(f->path)), std::ios::binary);
     in.read((char*)out->data(), (std::streamsize)f->size);
     return (uint64_t)in.gcount() == f->size;
 }
@@ -324,6 +352,20 @@ bool open_disc(const fs::path& source, Disc* disc, std::string* err)
     disc->files.erase(
         std::remove_if(disc->files.begin(), disc->files.end(), [&](const DiscFile& f) { return !on_disc(f.path); }),
         disc->files.end());
+    {   /* one entry per path (case-insensitive): a second EBOOT.BIN would be copied over the one that was checked */
+        std::vector<std::string> up;
+        for (const auto& f : disc->files) {
+            std::string u = f.path;
+            for (auto& c : u) c = (char)toupper((unsigned char)c);
+            up.push_back(u);
+        }
+        std::sort(up.begin(), up.end());
+        const auto dup = std::adjacent_find(up.begin(), up.end());
+        if (dup != up.end()) {
+            *err = "the disc image lists the same file twice: " + *dup;
+            return false;
+        }
+    }
     disc->total = 0;
     for (const auto& f : disc->files) disc->total += f.size;
 
@@ -388,8 +430,15 @@ bool copy_disc(const Disc& disc, const fs::path& dest, const std::function<bool(
     uint64_t done = 0;
     for (const auto& f : disc.files) {
         const fs::path to = dest / todsetup::from_utf8(f.path);
-        fs::create_directories(to.parent_path(), ec);
-        std::ofstream out(to, std::ios::binary | std::ios::trunc);
+        {   /* every file stays inside dest (the names were checked when the disc was read; this is the last guard) */
+            const fs::path rel = to.lexically_normal().lexically_relative(dest.lexically_normal());
+            if (rel.empty() || rel.is_absolute() || *rel.begin() == "..") {
+                *err = "refusing to write outside the install folder: " + f.path;
+                return false;
+            }
+        }
+        fs::create_directories(todsetup::long_path(to.parent_path()), ec);
+        std::ofstream out(todsetup::long_path(to), std::ios::binary | std::ios::trunc);
         if (!out) {
             *err = "could not write " + utf8(to);
             return false;
@@ -399,9 +448,16 @@ bool copy_disc(const Disc& disc, const fs::path& dest, const std::function<bool(
             iso.clear();
             iso.seekg((std::streamoff)f.offset);
         } else {
-            in.open(disc.source / todsetup::from_utf8(f.path), std::ios::binary);
+            const fs::path from = disc.source / todsetup::from_utf8(f.path);
+            in.open(todsetup::long_path(from), std::ios::binary);
             if (!in) {
-                *err = "could not read " + f.path;
+                /* why, for the bug report: the system's reason and the full path's length (a file kept by an antivirus,
+                 * an online-only cloud file, no permission, a path too long) */
+                const int e = errno;
+                *err = "could not read " + f.path + " (" + std::string(std::strerror(e)) + "; full path " +
+                       std::to_string(from.native().size()) + " characters). Check that the file is there and complete, "
+                       "that an antivirus or a cloud folder (OneDrive) is not holding it, or copy the disc folder to a "
+                       "short path such as C:\\TOD\\disc and try again.";
                 return false;
             }
         }

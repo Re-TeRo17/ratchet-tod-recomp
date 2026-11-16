@@ -270,6 +270,11 @@ static void watch(ULONGLONG now)
             if (v != gprev[i] && smallv(v) && smallv(gprev[i]) && gcnt[i] < 12) { gcnt[i]++; fprintf(stderr, "[dswatch] %6llu ms G+%X: %08X -> %08X\n", now - t0, i * 4, gprev[i], v); }
             gprev[i] = v;
         }
+        static float xp[32];   /* every slot's xp (+4) and level (+0x11), when they move (10/11: Zurkon as a weapon) */
+        if (gp(g)) for (int sl = 0; sl < 32; sl++) {
+            const float x = rf(g + sl * 20 + 4);
+            if (x != xp[sl]) { fprintf(stderr, "[dswatch] %6llu ms xp slot %d: %.1f -> %.1f level %d", now - t0, sl, xp[sl], x, (int)vm_read8(g + sl * 20 + 0x11)); fputc(10, stderr); xp[sl] = x; }
+        }
         static float ammo[32];   /* every slot's ammo, when it moves */
         if (gp(g)) for (int sl = 0; sl < 32; sl++) {
             const float a = rf(g + sl * 20 + 8);
@@ -279,8 +284,12 @@ static void watch(ULONGLONG now)
 }
 
 /* Called on every pad poll of the game's main thread (host_input.cpp), also while the F1 page is open. */
+extern "C" void tod_combat_poll(void);   /* combat_log.cpp: XP per weapon (TOD_COMBAT_LOG) */
+extern "C" void tod_zurkon_poll(void);   /* tod_zurkon.cpp: TOD_ZURKON_WEAPON (Mr. Zurkon as a weapon) */
 extern "C" void tod_ds_poll(int ui_open)
 {
+    tod_combat_poll();
+    tod_zurkon_poll();
     static ULONGLONG next = 0, cfg_next = 0;
     const ULONGLONG now = GetTickCount64();
     { static int w = -1; if (w < 0) w = getenv("TOD_DS_WATCH") != nullptr; if (w) watch(now); }

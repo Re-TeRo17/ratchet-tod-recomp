@@ -173,11 +173,21 @@ bool self_decrypt(const std::vector<uint8_t>& self, const SelfKeys& keys, std::v
         return false;
     }
     const uint8_t* ph = &self[(size_t)h.phdr];
-    uint64_t end = std::max<uint64_t>(0x40, e_phoff + (uint64_t)e_phnum * 0x38);
-    if (e_shnum) end = std::max(end, e_shoff + (uint64_t)e_shnum * 0x40);
-    for (int i = 0; i < e_phnum; i++)
-        end = std::max(end, tod_be64(ph + i * 0x38 + 0x08) + tod_be64(ph + i * 0x38 + 0x20));
-    if (end > (1ull << 30)) {
+    /* every offset + size below is checked against 1 GB one by one, so no sum can wrap around */
+    constexpr uint64_t kMaxElf = 1ull << 30;
+    auto fits = [&](uint64_t o, uint64_t n) { return o <= kMaxElf && n <= kMaxElf - o; };
+    bool sane = fits(e_phoff, (uint64_t)e_phnum * 0x38) && (!e_shnum || fits(e_shoff, (uint64_t)e_shnum * 0x40));
+    uint64_t end = 0x40;
+    if (sane) {
+        end = std::max<uint64_t>(end, e_phoff + (uint64_t)e_phnum * 0x38);
+        if (e_shnum) end = std::max(end, e_shoff + (uint64_t)e_shnum * 0x40);
+    }
+    for (int i = 0; i < e_phnum && sane; i++) {
+        const uint64_t o = tod_be64(ph + i * 0x38 + 0x08), n = tod_be64(ph + i * 0x38 + 0x20);
+        if (!fits(o, n)) sane = false;
+        else end = std::max(end, o + n);
+    }
+    if (!sane || end > kMaxElf) {
         *err = "the SELF's ELF headers are damaged";
         return false;
     }
@@ -198,6 +208,10 @@ bool self_decrypt(const std::vector<uint8_t>& self, const SelfKeys& keys, std::v
             return false;
         }
         const uint64_t p_offset = tod_be64(ph + prog * 0x38 + 0x08), p_filesz = tod_be64(ph + prog * 0x38 + 0x20);
+        if (p_offset > elf->size() || p_filesz > elf->size() - p_offset) {   /* the end above covers it; a last guard */
+            *err = "the SELF's segment table is damaged";
+            return false;
+        }
         std::vector<uint8_t> data(self.begin() + (long)off, self.begin() + (long)(off + size));
         if (encrypted == 3) {
             if (key_idx >= nkeys || iv_idx >= nkeys) {

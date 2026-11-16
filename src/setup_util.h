@@ -28,4 +28,20 @@ inline std::filesystem::path from_utf8(const std::string& s)
 {
     return std::filesystem::path(std::u8string(s.begin(), s.end()));
 }
+/* An absolute path in Windows' long form (\\?\C:\... or \\?\UNC\server\...), so opening it is not limited to 260
+ * characters (issue #20: a disc folder deep in the user's folders failed at the first long movie name). Other paths as they are. */
+inline std::filesystem::path long_path(const std::filesystem::path& p)
+{
+#ifdef _WIN32
+    std::error_code ec;
+    std::filesystem::path a = p.is_absolute() ? p : std::filesystem::absolute(p, ec);
+    if (ec) return p;
+    std::wstring w = a.lexically_normal().make_preferred().native();
+    if (w.rfind(L"\\\\?\\", 0) == 0) return a;
+    if (w.rfind(L"\\\\", 0) == 0) return std::filesystem::path(L"\\\\?\\UNC\\" + w.substr(2));
+    return std::filesystem::path(L"\\\\?\\" + w);
+#else
+    return p;
+#endif
+}
 }  // namespace todsetup

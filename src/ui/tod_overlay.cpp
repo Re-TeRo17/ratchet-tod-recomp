@@ -67,6 +67,7 @@
 #include <vector>
 
 #include "imgui.h"
+#include "imgui_internal.h"   /* alert10: ImFontAtlasTextureBlockQueueUpload for the game-font glyphs */
 #include "backends/imgui_impl_dx12.h"
 
 #include "rsx_d3d12_engine.h"
@@ -80,6 +81,18 @@ void cellPad_poll(void);                       /* cellPad.c: poll the host pad n
 void rsx_d3d12_engine_repaint(void);           /* rsx_d3d12_engine.c: present the last frame again (+ overlay) */
 typedef int (*cellSaveData_pick_hook_t)(int, int, const char* const*, const char* const*, int, int);
 void cellSaveData_set_pick_hook(cellSaveData_pick_hook_t fn);   /* cellSaveData.c */
+const char* cellSaveData_root(void);                           /* cellSaveData.c: the host save folder */
+unsigned char* stbi_load_from_memory(const unsigned char* buf, int len, int* x, int* y, int* comp, int req_comp);   /* ps3recomp cellPngDec.c */
+void stbi_image_free(void* p);
+int tod_game_archive_read(const char* entry, unsigned char** data, size_t* size);   /* src/patches/menu_archive.cpp (alert10) */
+int tod_fe_quit_state(int* n, float* x, float* y);
+extern float g_tod_ui_k;                    /* src/main.cpp: 1 = off, else (16/9)/aspect (the HUD narrowing of TOD_ASPECT) */   /* tod_settings_menu.cpp (alert10): 0 off the main menu, 1 on it, 2 our QUIT selected */
+const char* tod_menu_text(int id);
+float tod_fe_gap720(void);                 /* tod_settings_menu.cpp (10/11): the main menu bar per language */
+float tod_fe_shift720(void);
+float tod_aspect_frame(void);              /* src/main.cpp (10/11): TOD_ASPECT's frame shape, 0 = off */
+int tod_pause_hint_state(void);            /* tod_settings_menu.cpp (10/11): a pause-menu list is up with the focus */
+int tod_prompts_glyph(uint32_t cp, uint8_t* rgba, int cap, int* w, int* h);   /* src/patches/prompts.cpp (10/11) */
 extern "C" void tod_fps_apply_live(const char* v);   /* main.cpp (usr123): the FPS limit, applied live */
 extern "C" void tod_level_go(const char* level_const, const char* folder, const char* spot);   /* vram124 */
 extern "C" int tod_level_go_state(void);
@@ -280,6 +293,9 @@ void init_rows()
     add({ "TOD_REMOVE_HELMET", "Remove helmet",
           "On: let Ratchet breathe a little easier. The helmet comes off, the armor stays and still protects him.",
           { { NULL, "Off" }, { "1", "On" } }, 0, true, TAB_SYSTEM });
+    add({ "TOD_BAREFOOT", "Barefoot",
+          "On: like the old days on Veldin, Ratchet goes barefoot, boots off (with the base suit, or Armor look: Hidden). Applies at the next start.",
+          { { NULL, "Off" }, { "1", "On" } }, 0, false, TAB_SYSTEM });
     {
         Row r{ NULL, "Saves folder", "Opens the folder that holds your saves in Explorer. PS3_SAVEDATA_ROOT in tod.ini moves it; "
                "the layout (one BCES00052_SAVE_<n> folder per save) is the one RPCS3 uses.",
@@ -308,6 +324,13 @@ void init_rows()
     add({ "TOD_DS_FIRE_R2", "Fire with R2 (DualSense)",
           "DualSense: the right trigger fires and R1 does what R2 does on the PS3 pad (the on-screen prompts keep saying R1 for fire). Off: the PS3 layout.",
           { { NULL, "On" }, { "0", "Off (R1)" } }, 0, true, TAB_SYSTEM });
+    add({ "TOD_PAD_SWAP_R1R2", "Swap R1/R2",
+          "On: R1 and R2 trade places on every controller (fire with the trigger). On a DualSense, Fire with R2 already does it. "
+          "Any button can also be moved with PAD_MAP in tod.ini (e.g. PAD_MAP=CROSS=SQUARE,SQUARE=CROSS).",
+          { { NULL, "Off" }, { "1", "On" } }, 0, true, TAB_SYSTEM });
+    add({ "TOD_PAD_SWAP_L1L2", "Swap L1/L2",
+          "On: L1 and L2 trade places on every controller (zoom and strafe on the trigger).",
+          { { NULL, "Off" }, { "1", "On" } }, 0, true, TAB_SYSTEM });
     add({ "TOD_TELEPORT", "Teleport menu (F5)",
           "EXPERIMENTAL / debug: F5 opens a list of warp points of the current level and a level switcher (the level switch restarts the game on that level). Not for normal play.",
           { { NULL, "Off" }, { "1", "On" } }, 0, true, TAB_SYSTEM });
@@ -357,7 +380,9 @@ void init_rows()
             { "Fan project, not affiliated with Insomniac Games or Sony Interactive Entertainment", "All game content belongs to its owners; nothing of the game is included in this download.", NULL },
             { "7GP", "Thank you for supporting the project!", "Supporters" },
             { "IS", "Thank you for supporting the project!", NULL },
+            { "S", "Thank you for supporting the project!", NULL },
             { "Support the project: buymeacoffee.com/tero17", "Support goes to the development work of the port.", NULL },
+            { "Community: discord.gg/S4jd7643mg", "Help, news and screenshots. News also on X: @Re_TeRo17.", NULL },
             { "ps3recomp by sp00nznet (fork by soyjxck) (MIT)", "The PS3 static recompilation runtime this port is built on.", "Thanks" },
             { "dod3-recomp by soyjxck and contributors (MIT)", "The Drakengard 3 recompilation this port is modelled on (boot path, guest memory, Dear ImGui setup).", NULL },
             { "RACiT by HighDrexler (MIT)", "Discord presence and DualSense trigger effect code.", NULL },
@@ -732,6 +757,9 @@ int s_pick_new = -1, s_pick_sel;
 bool s_pick_save, s_pick_scroll, s_pick_hold;
 double s_pick_t0;
 uint64_t s_pick_hold_t0;
+std::string s_pick_title;                        /* quit125: a title instead of LOAD / SAVE GAME (the quit box) */
+bool s_pick_alert;                               /* alert10: draw the picker as the game's own YES / NO box (the vendor's "are you sure") */
+std::string s_alert_sub;                         /* alert10: the second line of that box (may be empty) */
 
 void pick_finish(int r)
 {
@@ -1037,6 +1065,137 @@ void srv_free(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE c, D3D12_GPU
 
 ImFont* s_tag_font;    /* 1.01: Bahnschrift for the version tag, when Windows has it */
 
+/* ---- alert10: the game's own font ---------------------------------------------------------------------------------------
+ * Read at start from the player's global_cached.psarc (/built/fonts/test/font1: font.dat, font.tph, font.tp; nothing of it
+ * is shipped or written to disk). font.dat (IGHW): section 0x29200 = per font {u32 map offset, u8 line height, ...},
+ * section 0x29300 = per font a u16[65536] codepoint -> glyph index, section 0x29400 = glyphs of 16 bytes
+ * {u16 cp, u16 x, u16 y, u16 page, u8, u8, u8 w, u8 h, u8 font, pad}. font.tph: per page 32 bytes {u32 offset, u8, u8 mips,
+ * u8 fmt (0x86 DXT1), ..., +0x18 u16 w, u16 h}; font.tp: the pages after its IGHW header (data offset at +0x24).
+ * Font 0 = the rounded face of the vendor's "Sei sicuro di voler comprare:", font 1 = the wide face of the main menu bar.
+ * The glyphs we need (Latin, U+0020..U+017F) are cut from the DXT1 page into ImGui's atlas as custom rectangles (white,
+ * alpha = the page's red channel) and drawn as textured quads by gf_text(). Missing file: gf_ok() false, callers fall back. */
+struct GfGlyph { ImFontAtlasRectId rect = ImFontAtlasRectId_Invalid; uint8_t w = 0, h = 0; };
+struct GfFont { bool ok = false; int lh = 0; GfGlyph g[0x180]; };
+GfFont s_gf[2];
+
+uint32_t gf_be32(const uint8_t* p) { return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3]; }
+uint16_t gf_be16(const uint8_t* p) { return (uint16_t)((p[0] << 8) | p[1]); }
+
+/* red channel of one texel of a DXT1 page (blocks little-endian, linear, 4x4) */
+uint8_t gf_dxt1_red(const uint8_t* pg, int W, int x, int y)
+{
+    const uint8_t* b = pg + ((size_t)(y >> 2) * (size_t)(W >> 2) + (size_t)(x >> 2)) * 8;
+    const uint16_t c0 = (uint16_t)(b[0] | (b[1] << 8)), c1 = (uint16_t)(b[2] | (b[3] << 8));
+    const int r0 = ((c0 >> 11) & 31) * 255 / 31, r1 = ((c1 >> 11) & 31) * 255 / 31;
+    const uint32_t bits = (uint32_t)b[4] | ((uint32_t)b[5] << 8) | ((uint32_t)b[6] << 16) | ((uint32_t)b[7] << 24);
+    const int i = (bits >> (2 * ((y & 3) * 4 + (x & 3)))) & 3;
+    if (i == 0) return (uint8_t)r0;
+    if (i == 1) return (uint8_t)r1;
+    if (c0 > c1) return (uint8_t)(i == 2 ? (2 * r0 + r1) / 3 : (r0 + 2 * r1) / 3);
+    return (uint8_t)(i == 2 ? (r0 + r1) / 2 : 0);
+}
+
+void gf_load(ImFontAtlas* atlas)
+{
+    const char* off = getenv("TOD_GAME_FONT");
+    if (off && off[0] == '0') return;
+    unsigned char *dat = NULL, *tph = NULL, *tp = NULL; size_t nd = 0, nh = 0, nt = 0;
+    const bool got = tod_game_archive_read("/built/fonts/test/font1/font.dat", &dat, &nd) &&
+                     tod_game_archive_read("/built/fonts/test/font1/font.tph", &tph, &nh) &&
+                     tod_game_archive_read("/built/fonts/test/font1/font.tp", &tp, &nt);
+    int made = 0;
+    if (got && nd > 0x40 && nh > 0x40 && nt > 0x40) {
+        /* IGHW sections of font.dat */
+        uint32_t s29200 = 0, s29300 = 0, s29400 = 0, n29400 = 0;
+        const uint32_t ns = gf_be32(dat + 8);
+        for (uint32_t i = 0; i < ns && 0x20 + i * 16 + 16 <= nd; i++) {
+            const uint8_t* e = dat + 0x20 + i * 16;
+            const uint32_t id = gf_be32(e), o = gf_be32(e + 4), sz = gf_be32(e + 12);
+            if (id == 0x29200) s29200 = o; else if (id == 0x29300) s29300 = o; else if (id == 0x29400) { s29400 = o; n29400 = sz / 16; }
+        }
+        const uint32_t tbase = gf_be32(tph + 0x24), tcount = gf_be32(tph + 0x28) & 0xFFFF, tdata = gf_be32(tp + 0x24);
+        ImTextureData* tex = atlas->TexData;
+        for (int f = 0; f < 2 && s29200 && s29300 && s29400; f++) {
+            if (s29200 + f * 8 + 8 > nd) break;
+            const uint32_t map = gf_be32(dat + s29200 + f * 8);
+            GfFont& F = s_gf[f];
+            F.lh = dat[s29200 + f * 8 + 4];
+            if (map + 0x20000 > nd || !F.lh) continue;
+            for (uint32_t cp = 0x20; cp < 0x180; cp++) {
+                const uint16_t gi = gf_be16(dat + map + cp * 2);
+                if (gi >= n29400) continue;
+                const uint8_t* r = dat + s29400 + (size_t)gi * 16;
+                if (gf_be16(r) != cp) continue;                       /* not in this font: no glyph */
+                const int gx = gf_be16(r + 2), gy = gf_be16(r + 4), page = gf_be16(r + 6), gw = r[10], gh = r[11];
+                if ((uint32_t)page >= tcount || !gw || !gh) continue;
+                const uint8_t* te = tph + tbase + page * 32;
+                if (tbase + page * 32 + 32 > nh || te[6] != 0x86) continue;
+                const int PW = gf_be16(te + 0x18), PH = gf_be16(te + 0x1A);
+                const size_t po = (size_t)tdata + gf_be32(te);
+                if (gx + gw > PW || gy + gh > PH || po + (size_t)PW * PH / 2 > nt) continue;
+                ImFontAtlasRect rr;
+                const ImFontAtlasRectId id = atlas->AddCustomRect(gw, gh, &rr);
+                if (id == ImFontAtlasRectId_Invalid) continue;
+                tex = atlas->TexData;
+                const int bpp = tex->BytesPerPixel;
+                for (int y = 0; y < gh; y++) {
+                    unsigned char* px = (unsigned char*)tex->GetPixelsAt(rr.x, rr.y + y);
+                    for (int x = 0; x < gw; x++) {
+                        const uint8_t a = gf_dxt1_red(tp + po, PW, gx + x, gy + y);
+                        if (bpp == 4) { px[x * 4 + 0] = 255; px[x * 4 + 1] = 255; px[x * 4 + 2] = 255; px[x * 4 + 3] = a; }
+                        else px[x] = a;
+                    }
+                }
+                ImFontAtlasTextureBlockQueueUpload(atlas, tex, rr.x, rr.y, gw, gh);
+                F.g[cp].rect = id; F.g[cp].w = (uint8_t)gw; F.g[cp].h = (uint8_t)gh;
+                made++;
+            }
+            F.ok = F.g['A'].rect != ImFontAtlasRectId_Invalid;
+        }
+    }
+    free(dat); free(tph); free(tp);
+    fprintf(stderr, "[overlay] game font: %s (%d glyphs)\n", s_gf[0].ok ? "loaded" : "not found, Windows fonts", made);
+}
+
+bool gf_ok(int f) { return f >= 0 && f < 2 && s_gf[f].ok; }
+
+/* next codepoint of a UTF-8 string */
+uint32_t gf_utf8(const char*& s)
+{
+    const unsigned char c = (unsigned char)*s++;
+    if (c < 0x80) return c;
+    int n = c >= 0xF0 ? 3 : c >= 0xE0 ? 2 : c >= 0xC0 ? 1 : 0;
+    uint32_t cp = c & (0x3F >> n);
+    while (n-- > 0 && (*s & 0xC0) == 0x80) cp = (cp << 6) | (*s++ & 0x3F);
+    return cp;
+}
+
+/* width of text in face f at size px (= the font's line height scaled to px) */
+float gf_width(int f, float px, const char* t)
+{
+    const GfFont& F = s_gf[f];
+    const float k = px / (float)F.lh;
+    float w = 0;
+    for (const char* s = t; *s;) { const uint32_t cp = gf_utf8(s); w += (cp < 0x180 && F.g[cp].w ? F.g[cp].w : F.g['?'].w) * k; }
+    return w;
+}
+
+void gf_text(ImDrawList* dl, int f, float px, ImVec2 p, ImU32 col, const char* t)
+{
+    const GfFont& F = s_gf[f];
+    const float k = px / (float)F.lh;
+    ImFontAtlas* atlas = ImGui::GetIO().Fonts;
+    for (const char* s = t; *s;) {
+        uint32_t cp = gf_utf8(s);
+        if (cp >= 0x180 || !F.g[cp].w) cp = '?';
+        const GfGlyph& g = F.g[cp];
+        ImFontAtlasRect rr;
+        if (g.rect != ImFontAtlasRectId_Invalid && cp != ' ' && atlas->GetCustomRect(g.rect, &rr))
+            dl->AddImage(atlas->TexRef, p, ImVec2(p.x + g.w * k, p.y + g.h * k), rr.uv0, rr.uv1, col);
+        p.x += g.w * k;
+    }
+}
+
 void style_setup(float k)
 {
     ImGuiStyle st;
@@ -1092,6 +1251,7 @@ bool ensure_ready(void* devp, void* queuep, int frames, unsigned w, unsigned h)
         const char* bahn = "C:\\Windows\\Fonts\\bahnschrift.ttf";
         if (GetFileAttributesA(bahn) != INVALID_FILE_ATTRIBUTES) s_tag_font = io.Fonts->AddFontFromFileTTF(bahn, 0.0f);
     }
+    gf_load(io.Fonts);
     ImGui::GetStyle().FontSizeBase = 20.0f;
     s_scale_cur = 0.0f;
 
@@ -1578,6 +1738,15 @@ void version_tag_draw(float W, float H, float k)
 {
     static const char kLine[] = "TOOLS OF DESTRUCTION RECOMPILED " TOD_RELEASE_VERSION;
     ImDrawList* dl = ImGui::GetForegroundDrawList();
+    if (gf_ok(0)) {   /* alert10: the game's own font (the rounded face of its menus and boxes) */
+        const float px = 30.0f * k, margin = 14.0f * k;
+        const float w = gf_width(0, px, kLine);
+        const float pic_h = W * 704.0f / 1280.0f, band = pic_h < H ? (H - pic_h) * 0.5f : 0.0f;
+        const ImVec2 at(W - margin - w, H - band - margin - px * 0.85f);
+        gf_text(dl, 0, px, ImVec2(at.x + 1.5f * k, at.y + 1.5f * k), IM_COL32(0, 0, 0, 120), kLine);
+        gf_text(dl, 0, px, at, IM_COL32(225, 225, 225, 135), kLine);
+        return;
+    }
     ImFont* f = s_tag_font ? s_tag_font : ImGui::GetFont();
     const float size = 21.0f * k, margin = 14.0f * k;
     const ImVec2 sz = f->CalcTextSizeA(size, FLT_MAX, 0.0f, kLine);
@@ -1590,6 +1759,186 @@ void version_tag_draw(float W, float H, float k)
     if (b > 0) dl->AddText(f, size, ImVec2(at.x + 1.5f * k + b, at.y + 1.5f * k), IM_COL32(0, 0, 0, 110), kLine);
     dl->AddText(f, size, at, IM_COL32(225, 225, 225, 125), kLine);      /* see-through: it must not compete with the menu */
     if (b > 0) dl->AddText(f, size, ImVec2(at.x + b, at.y), IM_COL32(225, 225, 225, 125), kLine);
+}
+
+/* 10/11, issue #25 point 2: SELECT / BACK under the pause menu's lists, laid out like the game's own hints of the MISSION page
+ * (h_hint2_t122, 1080p: one row centred on x 960, text ink y 948..976 in the game's plain face, colour (93,108,132),
+ * "INDIETRO" 189 px wide, the button's glyph ~30 px left of its word). The glyphs are the button prompts' own (circle /
+ * cross of the set on screen, the keyboard's caps with the keys as bound: src/patches/prompts.cpp). */
+struct HintGlyph { ImFontAtlasRectId rect = ImFontAtlasRectId_Invalid; int sig = 0, w = 0, h = 0; double t = -10.0; };
+HintGlyph s_hint_g[2];   /* 0 cross (select), 1 circle (back) */
+void hint_glyph_refresh(int i, int px)
+{
+    HintGlyph& G = s_hint_g[i];
+    const double t = now_s();
+    if (t - G.t < 0.5 && G.rect != ImFontAtlasRectId_Invalid) return;   /* the set / the keys: looked at twice a second */
+    G.t = t;
+    static std::vector<uint8_t> buf(208 * 208 * 4);
+    int w = 0, h = 0;
+    const int sig = tod_prompts_glyph(i == 0 ? 0xE003u : 0xE001u, buf.data(), (int)buf.size(), &w, &h);
+    const int f = std::max(1, std::min(8, w / std::max(8, 2 * px)));   /* box-shrunk to about twice the size drawn */
+    const int key = sig * 16 + f;
+    if (!sig || w <= 0 || (key == G.sig && G.rect != ImFontAtlasRectId_Invalid)) return;
+    ImFontAtlas* atlas = ImGui::GetIO().Fonts;
+    if (!atlas->TexData || atlas->TexData->BytesPerPixel != 4) return;
+    if (G.rect != ImFontAtlasRectId_Invalid) { atlas->RemoveCustomRect(G.rect); G.rect = ImFontAtlasRectId_Invalid; }
+    const int ow = w / f, oh = h / f;
+    ImFontAtlasRect rr;
+    G.rect = atlas->AddCustomRect(ow, oh, &rr);
+    if (G.rect == ImFontAtlasRectId_Invalid) return;
+    ImTextureData* tex = atlas->TexData;
+    for (int y = 0; y < oh; y++) {
+        unsigned char* d = (unsigned char*)tex->GetPixelsAt(rr.x, rr.y + y);
+        for (int x = 0; x < ow; x++) {
+            unsigned sa = 0, sr = 0, sg = 0, sb = 0;
+            for (int j = 0; j < f; j++) for (int q = 0; q < f; q++) {
+                const uint8_t* s = &buf[((size_t)(y * f + j) * w + x * f + q) * 4];
+                sa += s[3]; sr += s[0] * s[3]; sg += s[1] * s[3]; sb += s[2] * s[3];
+            }
+            d[x * 4 + 0] = (unsigned char)(sa ? sr / sa : 0); d[x * 4 + 1] = (unsigned char)(sa ? sg / sa : 0);
+            d[x * 4 + 2] = (unsigned char)(sa ? sb / sa : 0); d[x * 4 + 3] = (unsigned char)(sa / (unsigned)(f * f));
+        }
+    }
+    ImFontAtlasTextureBlockQueueUpload(atlas, tex, rr.x, rr.y, ow, oh);
+    G.sig = key; G.w = ow; G.h = oh;
+    fprintf(stderr, "[pausehint] glyph %s: set signature %d, %dx%d\n", i == 0 ? "cross" : "circle", sig, ow, oh);
+}
+/* 10/11: in-game combat log (TOD_COMBAT_LOG=2, combat_log.cpp): the last lines on the left, below the HUD's health, fading out
+ * after ~4 s. White = damage dealt, gold = kill, red = damage taken by Ratchet, cyan = XP / level up. Hidden while a menu or the
+ * pause is open ([0x10731D00] != 0). */
+extern "C" int tod_combat_log_visible(void);
+extern "C" int tod_combat_log_lines(int max_age, int max_n, int* kinds, char (*texts)[96], int* ages);
+static bool combat_log_on(void)
+{
+    return tod_combat_log_visible() != 0;
+}
+static void combat_log_draw(float W, float H)
+{
+    (void)W;
+    int kinds[10], ages[10]; char texts[10][96];
+    const int n = tod_combat_log_lines(260, 10, kinds, texts, ages);
+    if (n <= 0) return;
+    const float k = H / 1080.0f, px = 26.0f * k, step = 30.0f * k;
+    const bool gf = gf_ok(0);
+    ImFont* wf = ImGui::GetFont();
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    float y = H * 0.30f;
+    for (int i = 0; i < n; i++, y += step) {
+        const float a = ages[i] < 200 ? 1.0f : (float)(260 - ages[i]) / 60.0f;
+        const int al = (int)(255 * (a < 0 ? 0 : a));
+        static const ImU32 rgb[4] = { IM_COL32(235, 235, 235, 0), IM_COL32(255, 90, 80, 0), IM_COL32(110, 220, 255, 0), IM_COL32(255, 200, 60, 0) };
+        const ImU32 col = (rgb[kinds[i] & 3] & 0x00FFFFFFu) | ((ImU32)al << 24);
+        const ImVec2 pt(40.0f * k, y), sh(pt.x + 2.0f * k, y + 2.0f * k);
+        if (gf) { gf_text(dl, 0, px, sh, IM_COL32(0, 0, 0, al * 3 / 4), texts[i]); gf_text(dl, 0, px, pt, col, texts[i]); }
+        else { dl->AddText(wf, px * 0.8f, sh, IM_COL32(0, 0, 0, al * 3 / 4), texts[i]); dl->AddText(wf, px * 0.8f, pt, col, texts[i]); }
+    }
+}
+
+void pause_hint_draw(float W, float H)
+{
+    if (!gf_ok(0)) return;
+    const float u = H / 1080.0f;                                   /* the pause scene: 16:9 picture, H tall, centred */
+    static float s_px1 = 0.0f;                                     /* the face's size for 1 px of "INDIETRO" width at 1080p */
+    if (s_px1 <= 0.0f) { const float w1 = gf_width(0, 100.0f, "INDIETRO"); s_px1 = w1 > 1.0f ? 189.0f * 100.0f / w1 : 34.0f; }
+    const float px = s_px1 * u;
+    const float ink = 29.0f * u;                                   /* the words' ink height */
+    const float gs = 32.0f * u;                                    /* the glyph's box */
+    hint_glyph_refresh(0, (int)gs); hint_glyph_refresh(1, (int)gs);
+    const char* w0 = tod_menu_text(157); const char* w1 = tod_menu_text(158);
+    const float gap_g = 24.0f * u, gap_w = 26.0f * u;              /* glyph -> word, word -> next glyph (h_hint3: as MISSION's) */
+    const float tw0 = gf_width(0, px, w0), tw1 = gf_width(0, px, w1);
+    const float total = gs + gap_g + tw0 + gap_w + gs + gap_g + tw1;
+    float x = W * 0.5f - total * 0.5f;
+    const float cy = 962.0f * u;                                   /* the middle of the row */
+    const float ty = cy - ink * 0.5f - (px - ink) * 0.62f;         /* the face's box sits above its ink (calibrated on h_hint3) */
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    ImFontAtlas* atlas = ImGui::GetIO().Fonts;
+    const ImU32 col = IM_COL32(93, 108, 132, 255);
+    auto glyph = [&](int i) {
+        ImFontAtlasRect rr;
+        if (s_hint_g[i].rect != ImFontAtlasRectId_Invalid && atlas->GetCustomRect(s_hint_g[i].rect, &rr))
+            dl->AddImage(atlas->TexRef, ImVec2(x, cy - gs * 0.5f), ImVec2(x + gs, cy + gs * 0.5f), rr.uv0, rr.uv1, IM_COL32(150, 154, 162, 255));   /* the game shows them dimmed */
+        x += gs + gap_g;
+    };
+    glyph(0); gf_text(dl, 0, px, ImVec2(x, ty), col, w0); x += tw0 + gap_w;
+    glyph(1); gf_text(dl, 0, px, ImVec2(x, ty), col, w1);
+}
+
+/* alert10: the fifth item of the main menu bar (NUOVO GIOCO / CARICA / ELIMINA / OPZIONI / ESCI), drawn like the game's own
+ * items: the wide face of the game's font, flat colour (grey-gold, white when selected), and the mirror image fading out
+ * below. Measured at 1280x720 in all 11 languages (log\quit125\lang_*): the bar always ends at x 1032, the text's ink
+ * spans y 637..652 (16 px, the font's ink at scale 0.51), the reflection starts 2 px lower at ~19 % and fades to ~6 %. */
+void main_quit_draw(float W, float H)
+{
+    int n = 0; float fx = 0, fy = 0;
+    const int st = tod_fe_quit_state(&n, &fx, &fy);
+    if (!st || !gf_ok(1)) return;
+    /* the game's picture is 1280x704, fitted inside the window and centred (mq32: at 2560x1080 the bar spans 682..1882, i.e.
+     * 1080 / 704 = 1.534 per unit); below, the 720p measurements minus the 8 px band of 1280x720 */
+    const float sc = std::min(W / 1280.0f, H / 704.0f), ox = (W - 1280.0f * sc) * 0.5f, oy = (H - 704.0f * sc) * 0.5f - 8.0f * sc;
+    const char* label = tod_menu_text(143);
+    const GfFont& F = s_gf[1];
+    const float px = 0.51f * (float)F.lh * sc, k = px / (float)F.lh;
+    const float ink_top = 14.0f * k;                       /* the face's ink starts 14 units below the glyph box (font_render.py) */
+    /* the game's items move 60 scene units (= 61 px at 720p) left when the wrapper installs (mq34): OPZIONI ends at 971, the
+     * same 46 px gap, the bar 189..1089 is centred */
+    /* ultrawide (TOD_ASPECT, src/stubs/ui_xform.cpp): the game's HUD is narrowed by g_tod_ui_k around the middle; measured
+     * (uw21 / uw32, 09/11) the bar lands at centre + (16:9 position - centre) * k * 1251.6/1280 (the UI's own width), so ESCI
+     * follows it: position and letter widths */
+    /* 09/11 night: since the menus' 2D camera keeps 16:9 (aspect_hor.cpp) the bar is narrowed once, by the renderer's UI viewport,
+     * so in a frame wider than 16:9 it is the 16:9 picture at H/720 per unit, centred (cg21/cg32: NUOVO GIOCO starts at 603 =
+     * 320 + 189 * 1.5, OPZIONI ends at 1777); sc above is H/704 there (the picture fit), so x distances and letter widths
+     * take (H/720)/sc. Heights already matched (rows 965..989 like OPZIONI). */
+    /* 10/11 (u_pb21): only with TOD_ASPECT. Without it a wide window shows the 16:9 picture fitted with bars at the sides, the
+     * game's bar at H/704 per unit like ESCI's sc, and H/720 put ESCI 9 px left at 2560x1080 */
+    const float hx = (tod_aspect_frame() > 0.0f && W / H > 16.0f / 9.0f + 0.001f) ? (H / 720.0f) / sc : 1.0f;
+    const float cxw = W * 0.5f;
+    /* 10/11: after the game's last item (1032.3 unshifted) + the shift + the language's gap (tod_settings_menu.cpp) */
+    /* -2: QUIT's first glyph box starts 2 px before its ink (bl_*: the gap came out 3 px wider at 1080p in all 11 languages) */
+    const float qx = 1032.3f + tod_fe_shift720() + tod_fe_gap720() - 2.0f;
+    const float x0 = cxw + (ox + qx * sc - cxw) * hx, top = oy + 637.0f * sc - ink_top;
+    const float axis = oy + 653.5f * sc;                       /* the mirror line, between the ink's bottom and the reflection */
+    const ImU32 col = st == 2 ? IM_COL32(251, 247, 251, 255) : IM_COL32(116, 102, 81, 255);
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    {   /* the letters (gf_text with the horizontal factor) */
+        ImFontAtlas* at = ImGui::GetIO().Fonts; float xx = x0;
+        for (const char* s = label; *s;) {
+            uint32_t cp = gf_utf8(s);
+            if (cp >= 0x180 || !F.g[cp].w) cp = '?';
+            const GfGlyph& g = F.g[cp];
+            ImFontAtlasRect rr;
+            if (g.rect != ImFontAtlasRectId_Invalid && cp != ' ' && at->GetCustomRect(g.rect, &rr))
+                dl->AddImage(at->TexRef, ImVec2(xx, top), ImVec2(xx + g.w * k * hx, top + g.h * k), rr.uv0, rr.uv1, col);
+            xx += g.w * k * hx;
+        }
+    }
+    /* the reflection: each glyph upside down about the axis, alpha from 19 % at the ink's bottom to 6 % at its top */
+    ImFontAtlas* atlas = ImGui::GetIO().Fonts;
+    const ImU32 rgb = col & 0x00FFFFFFu;
+    auto alpha_at = [&](float y) { const float t = (y - (axis + 1.5f * sc)) / (16.0f * sc); float a = 0.19f - 0.13f * t; if (a < 0) a = 0; if (a > 0.19f) a = 0.19f; return rgb | ((ImU32)(a * 255.0f) << 24); };
+    dl->PushTexture(atlas->TexRef);
+    float x = x0;
+    for (const char* s = label; *s;) {
+        uint32_t cp = gf_utf8(s);
+        if (cp >= 0x180 || !F.g[cp].w) cp = '?';
+        const GfGlyph& g = F.g[cp];
+        ImFontAtlasRect rr;
+        if (g.rect != ImFontAtlasRectId_Invalid && cp != ' ' && atlas->GetCustomRect(g.rect, &rr)) {
+            const float yb = 2.0f * axis - (top + g.h * k), ye = 2.0f * axis - top;   /* box bottom mirrored to the top, and back */
+            const float x1 = x + g.w * k * hx;
+            const ImU32 ct = alpha_at(yb), cb = alpha_at(ye);
+            dl->PrimReserve(6, 4);
+            const ImDrawIdx i0 = (ImDrawIdx)dl->_VtxCurrentIdx;
+            dl->PrimWriteVtx(ImVec2(x, yb), ImVec2(rr.uv0.x, rr.uv1.y), ct);
+            dl->PrimWriteVtx(ImVec2(x1, yb), ImVec2(rr.uv1.x, rr.uv1.y), ct);
+            dl->PrimWriteVtx(ImVec2(x1, ye), ImVec2(rr.uv1.x, rr.uv0.y), cb);
+            dl->PrimWriteVtx(ImVec2(x, ye), ImVec2(rr.uv0.x, rr.uv0.y), cb);
+            dl->PrimWriteIdx(i0); dl->PrimWriteIdx((ImDrawIdx)(i0 + 1)); dl->PrimWriteIdx((ImDrawIdx)(i0 + 2));
+            dl->PrimWriteIdx(i0); dl->PrimWriteIdx((ImDrawIdx)(i0 + 2)); dl->PrimWriteIdx((ImDrawIdx)(i0 + 3));
+        }
+        x += g.w * k * hx;
+    }
+    dl->PopTexture();
 }
 
 /* TOD_OVERLAY_SCRIPT (debug): "<sec>:<cmd>,..." run on the render thread, one per present, seconds since the first present. */
@@ -1635,8 +1984,217 @@ void pick_script(double t)
     else if (c == "act") pick_act(A_ACCEPT); else if (c == "back") pick_act(A_BACK);
 }
 
+/* alert10: the YES / NO box drawn like the weapon vendor's "Sei sicuro di voler comprare:" (log\quit125\conferma_negozio_nativa.png):
+ * the screen darkened, a navy panel with cut corners, a light blue frame, orange marks on the sides, grey question, white
+ * second line, YES / NO stacked in the middle, the chosen one on an orange bar that fades out at both ends. Sizes follow the
+ * window height, so it looks the same at any resolution and stays centred at 21:9 / 32:9. */
+/* the vendor box's panel (measurements in build_alert): navy fill, cut corners, side bevels, orange marks */
+void game_panel(ImDrawList* dl, float x0, float y0, float x1, float y1, float u)
+{
+    const float c = 27.0f * u, ph = y1 - y0;
+    const ImVec2 poly[8] = { ImVec2(x0 + c, y0), ImVec2(x1 - c, y0), ImVec2(x1, y0 + c), ImVec2(x1, y1 - c),
+                             ImVec2(x1 - c, y1), ImVec2(x0 + c, y1), ImVec2(x0, y1 - c), ImVec2(x0, y0 + c) };
+    dl->AddConvexPolyFilled(poly, 8, IM_COL32(7, 12, 32, 250));
+    dl->AddPolyline(poly, 8, IM_COL32(48, 61, 75, 255), ImDrawFlags_Closed, 2.0f * u);
+    for (int s = 0; s < 2; s++) {                    /* the side bevels: light outer edge, darker body, bright inner edge */
+        const float a = s ? x1 - 9.0f * u : x0, b = a + 9.0f * u, ya = y0 + c, yb = y1 - c;
+        dl->AddRectFilled(ImVec2(a, ya), ImVec2(b, yb), IM_COL32(35, 58, 94, 255));
+        const float ox = s ? b - 2.0f * u : a, ix = s ? a : b - 2.0f * u;
+        dl->AddRectFilled(ImVec2(ox, ya), ImVec2(ox + 2.0f * u, yb), IM_COL32(56, 81, 112, 255));
+        dl->AddRectFilled(ImVec2(ix, ya), ImVec2(ix + 2.0f * u, yb), IM_COL32(98, 115, 131, 255));
+        const float mx = s ? x1 + 1.0f * u : x0 - 4.0f * u;   /* the orange mark, 2 px, a 1 px gap from the frame */
+        const float mh = std::min(48.0f * u, ph * 0.25f);
+        dl->AddRectFilled(ImVec2(mx, y0 + ph * 0.5f - mh), ImVec2(mx + 2.5f * u, y0 + ph * 0.5f + mh), IM_COL32(176, 111, 36, 255));
+    }
+}
+
+/* the vendor's selection: an orange bar ry..ry+rh, bh either side of cx, plateau pl, edges fading in 10 px */
+void game_selbar(ImDrawList* dl, float cx, float ry, float rh, float bh, float pl, float u)
+{
+    /* 3 bands (edge fade, plateau, edge fade) x 3 columns (fade in, plateau, fade out) */
+    const ImVec4 E(198, 120, 22, 255), M(73, 50, 28, 255);
+    const float ys[4] = { ry, ry + 10.0f * u, ry + rh - 10.0f * u, ry + rh };
+    const ImVec4 top[3] = { E, M, M }, bot[3] = { M, M, E };
+    const float xs[4] = { cx - bh, cx - pl, cx + pl, cx + bh };
+    const float al[4] = { 0.0f, 1.0f, 1.0f, 0.0f };
+    for (int v = 0; v < 3; v++)
+        for (int h = 0; h < 3; h++) {
+            auto col = [&](const ImVec4& cc, float aa) { return IM_COL32((int)cc.x, (int)cc.y, (int)cc.z, (int)(255 * aa)); };
+            dl->AddRectFilledMultiColor(ImVec2(xs[h], ys[v]), ImVec2(xs[h + 1], ys[v + 1]),
+                                        col(top[v], al[h]), col(top[v], al[h + 1]), col(bot[v], al[h + 1]), col(bot[v], al[h]));
+        }
+}
+
+void build_alert(float W, float H)
+{
+    /* alert10: measured on the weapon vendor's box at 1280x720 (log\quit125\conferma_negozio_nativa.png, cf16_t155.png):
+     * panel 650x240 (x 315..965, y 176..415), corners cut 27 px, sides a 9 px bevel, top / bottom a 2 px line, orange marks
+     * 2 px wide outside the sides (y 248..343), fill (7,12,32), question (91,111,126) at 40 px, second line (179,188,208)
+     * at 33 px, YES / NO rows 36 px tall 40 px apart, the chosen one on an orange bar 370 px wide (plateau 180) with bright
+     * edges (198,120,22) fading to (73,50,28) in 10 px; chosen text (134,121,97), the other (91,111,126). The game's own
+     * font (gf_*), the Windows one when the game files are not there. */
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    const float u = H / 720.0f;
+    const bool gf = gf_ok(0);
+    ImFont* wf = s_tag_font ? s_tag_font : ImGui::GetFont();
+    auto tw = [&](float px, const char* t) { return gf ? gf_width(0, px, t) : wf->CalcTextSizeA(px * 0.8f, FLT_MAX, 0.0f, t).x; };
+    auto tx = [&](float px, ImVec2 p, ImU32 c, const char* t) { if (gf) gf_text(dl, 0, px, p, c, t); else dl->AddText(wf, px * 0.8f, ImVec2(p.x, p.y + px * 0.1f), c, t); };
+    dl->AddRectFilled(ImVec2(0, 0), ImVec2(W, H), IM_COL32(0, 4, 12, 170));
+    const float fq = 40.0f * u, fs = 33.0f * u, fo = 40.0f * u;
+    const bool sub = !s_alert_sub.empty();
+    const float need = std::max(tw(fq, s_pick_title.c_str()), sub ? tw(fs, s_alert_sub.c_str()) : 0.0f) + 90.0f * u;
+    const float pw = std::min(W - 32.0f * u, std::max(650.0f * u, need)), ph = 256.0f * u;   /* 16 px more than the vendor box: the same space under NO as above the question */
+    /* 09/11 night: centred on the screen (the user: it sat high; it was at the vendor box's place, 64 px above the middle) */
+    const float cx = W * 0.5f, y0 = H * 0.5f - ph * 0.5f;
+    game_panel(dl, cx - pw * 0.5f, y0, cx + pw * 0.5f, y0 + ph, u);
+    /* without a second line the question sits in the middle of the space above YES (mq30: a hole under it otherwise) */
+    tx(fq, ImVec2(cx - tw(fq, s_pick_title.c_str()) * 0.5f, y0 + (sub ? 16.0f : 58.0f) * u), IM_COL32(91, 111, 126, 255), s_pick_title.c_str());
+    if (sub) tx(fs, ImVec2(cx - tw(fs, s_alert_sub.c_str()) * 0.5f, y0 + 95.0f * u), IM_COL32(179, 188, 208, 255), s_alert_sub.c_str());
+    const int n = (int)s_pick_name.size();
+    const float rh = 36.0f * u, step = 40.0f * u, bh = 185.0f * u, pl = 90.0f * u;
+    ImGuiIO& io = ImGui::GetIO();
+    const bool moved = io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f;
+    for (int i = 0; i < n; i++) {
+        const float ry = y0 + 162.0f * u + step * (float)i;
+        const bool hov = io.MousePos.x >= cx - bh && io.MousePos.x < cx + bh && io.MousePos.y >= ry && io.MousePos.y < ry + step;
+        if (hov && moved) s_pick_sel = i;
+        if (hov && ImGui::IsMouseClicked(0)) { s_pick_sel = i; pick_finish(i); }
+        if (i == s_pick_sel) game_selbar(dl, cx, ry, rh, bh, pl, u);
+        const char* t = s_pick_name[i].c_str();
+        tx(fo, ImVec2(cx - tw(fo, t) * 0.5f, ry + (rh - fo) * 0.5f), i == s_pick_sel ? IM_COL32(134, 121, 97, 255) : IM_COL32(91, 111, 126, 255), t);
+    }
+}
+
+/* the save / load list in the game's own look (the vendor box, sp3): title on top, one row per save (its number, the
+ * planet, the date under it), the chosen row on the orange bar, at most 6 rows with orange arrows when more are hidden. */
+int s_pick_top;                                  /* the first row shown */
+
+/* sp5: each save's ICON0.PNG (320x176, the planet picture the PS3's own save list shows), halved into the ImGui atlas the
+ * first time a row shows it; cached by path + size + time (a save made since then gets its new picture). */
+struct PickIcon { std::string key; ImFontAtlasRectId rect = ImFontAtlasRectId_Invalid; };
+std::vector<PickIcon> s_icons;
+ImFontAtlasRectId pick_icon(const std::string& dir)
+{
+    std::string path = std::string(cellSaveData_root()) + "/" + dir + "/ICON0.PNG";
+    WIN32_FILE_ATTRIBUTE_DATA fa;
+    if (!GetFileAttributesExA(path.c_str(), GetFileExInfoStandard, &fa)) return ImFontAtlasRectId_Invalid;
+    char k[64]; snprintf(k, sizeof k, "|%lu|%lu", fa.nFileSizeLow, fa.ftLastWriteTime.dwLowDateTime);
+    const std::string key = path + k;
+    for (const PickIcon& p : s_icons) if (p.key == key) return p.rect;
+    PickIcon pi; pi.key = key;
+    ImFontAtlas* atlas = ImGui::GetIO().Fonts;
+    if (s_icons.size() < 96 && atlas->TexData && atlas->TexData->BytesPerPixel == 4) {
+        std::vector<unsigned char> f;
+        if (FILE* fp = fopen(path.c_str(), "rb")) { fseek(fp, 0, SEEK_END); const long n = ftell(fp); fseek(fp, 0, SEEK_SET);
+            if (n > 0 && n < (8 << 20)) { f.resize((size_t)n); if (fread(f.data(), 1, (size_t)n, fp) != (size_t)n) f.clear(); } fclose(fp); }
+        int w = 0, h = 0, c = 0;
+        unsigned char* img = f.empty() ? NULL : stbi_load_from_memory(f.data(), (int)f.size(), &w, &h, &c, 4);
+        if (img && w >= 2 && h >= 2) {
+            const int ow = w / 2, oh = h / 2;
+            ImFontAtlasRect rr;
+            pi.rect = atlas->AddCustomRect(ow, oh, &rr);
+            if (pi.rect != ImFontAtlasRectId_Invalid) {
+                ImTextureData* tex = atlas->TexData;
+                for (int y = 0; y < oh; y++) {
+                    unsigned char* d = (unsigned char*)tex->GetPixelsAt(rr.x, rr.y + y);
+                    for (int x = 0; x < ow; x++)
+                        for (int ch = 0; ch < 4; ch++) {
+                            const unsigned char* s = img + ((size_t)(2 * y) * w + 2 * x) * 4 + ch;
+                            d[x * 4 + ch] = (unsigned char)((s[0] + s[4] + s[(size_t)w * 4] + s[(size_t)w * 4 + 4] + 2) / 4);
+                        }
+                }
+                ImFontAtlasTextureBlockQueueUpload(atlas, tex, rr.x, rr.y, ow, oh);
+            }
+        }
+        if (img) stbi_image_free(img);
+    }
+    fprintf(stderr, "[savepick] icon %s: %s\n", dir.c_str(), pi.rect != ImFontAtlasRectId_Invalid ? "loaded" : "none");
+    s_icons.push_back(pi);
+    return pi.rect;
+}
+void build_picker_game(float W, float H)
+{
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    const float u = H / 720.0f;
+    const bool gf = gf_ok(0);
+    ImFont* wf = s_tag_font ? s_tag_font : ImGui::GetFont();
+    auto tw = [&](float px, const char* t) { return gf ? gf_width(0, px, t) : wf->CalcTextSizeA(px * 0.8f, FLT_MAX, 0.0f, t).x; };
+    auto tx = [&](float px, ImVec2 p, ImU32 c, const char* t) { if (gf) gf_text(dl, 0, px, p, c, t); else dl->AddText(wf, px * 0.8f, ImVec2(p.x, p.y + px * 0.1f), c, t); };
+    dl->AddRectFilled(ImVec2(0, 0), ImVec2(W, H), IM_COL32(0, 4, 12, 170));
+    /* sp8 (the user's choice): the thumbnails (A), at most 4 rows, tall enough for a big planet picture */
+    const int n = (int)s_pick_name.size(), vis = std::min(n, 4);
+    if (s_pick_sel < s_pick_top) s_pick_top = s_pick_sel;
+    if (s_pick_sel >= s_pick_top + vis) s_pick_top = s_pick_sel - vis + 1;
+    s_pick_top = std::max(0, std::min(s_pick_top, n - vis));
+    const float ft = 40.0f * u, f1 = 33.0f * u, f2 = 24.0f * u;
+    const float rh = 76.0f * u, step = 82.0f * u, head = 86.0f * u, foot = 30.0f * u;
+    const float pw = std::min(W - 32.0f * u, 800.0f * u), ph = head + step * (float)vis + foot;
+    const float cx = W * 0.5f, x0 = cx - pw * 0.5f, y0 = H * 0.5f - ph * 0.5f - 10.0f * u;
+    game_panel(dl, x0, y0, x0 + pw, y0 + ph, u);
+    const char* title = !s_pick_title.empty() ? s_pick_title.c_str() : tod_menu_text(s_pick_save ? 155 : 154);
+    tx(ft, ImVec2(cx - tw(ft, title) * 0.5f, y0 + 18.0f * u), IM_COL32(91, 111, 126, 255), title);
+    const float bh = pw * 0.5f - 40.0f * u, pl = bh - 110.0f * u;
+    ImGuiIO& io = ImGui::GetIO();
+    const bool moved = io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f;
+    if (io.MouseWheel != 0.0f && n > vis) s_pick_top = std::max(0, std::min(n - vis, s_pick_top - (io.MouseWheel > 0 ? 1 : -1)));
+    int num = 0;                                    /* saves are numbered, the new slot is not */
+    for (int i = 0; i < s_pick_top; i++) if (i != s_pick_new) num++;
+    const float ih = 68.0f * u, iw = ih * 320.0f / 176.0f, ix = x0 + 84.0f * u;   /* the planet picture (ICON0.PNG) */
+    const float lx = x0 + 56.0f * u, tx0 = ix + iw + 20.0f * u;
+    ImFontAtlas* atlas = ImGui::GetIO().Fonts;
+    for (int r = 0; r < vis; r++) {
+        const int i = s_pick_top + r;
+        const float ry = y0 + head + step * (float)r;
+        const bool hov = io.MousePos.x >= cx - bh && io.MousePos.x < cx + bh && io.MousePos.y >= ry && io.MousePos.y < ry + step;
+        if (hov && moved) s_pick_sel = i;
+        if (hov && ImGui::IsMouseClicked(0)) { s_pick_sel = i; pick_finish(i); }
+        const bool sel = i == s_pick_sel;
+        if (sel) game_selbar(dl, cx, ry, rh, bh, pl, u);
+        const ImU32 c1 = sel ? IM_COL32(134, 121, 97, 255) : IM_COL32(91, 111, 126, 255);
+        const ImU32 c2 = sel ? IM_COL32(179, 188, 208, 255) : IM_COL32(70, 86, 100, 255);
+        std::string l1, l2;
+        if (i == s_pick_new) {
+            l1 = tod_menu_text(156);
+            /* 09/11 night (the user: without a picture beside it the row looked like an error): an empty picture box with a "+" */
+            const ImVec2 a(ix, ry + (rh - ih) * 0.5f), b(ix + iw, ry + (rh + ih) * 0.5f);
+            dl->AddRectFilled(a, b, IM_COL32(10, 16, 28, 200));
+            dl->AddRect(a, b, sel ? IM_COL32(198, 120, 22, 255) : IM_COL32(48, 61, 75, 255), 0.0f, 0, 1.5f * u);
+            const float pcx = (a.x + b.x) * 0.5f, pcy = (a.y + b.y) * 0.5f, ps = ih * 0.22f, pt = 3.0f * u;
+            const ImU32 pc = sel ? IM_COL32(198, 120, 22, 255) : IM_COL32(70, 86, 100, 255);
+            dl->AddRectFilled(ImVec2(pcx - ps, pcy - pt * 0.5f), ImVec2(pcx + ps, pcy + pt * 0.5f), pc);
+            dl->AddRectFilled(ImVec2(pcx - pt * 0.5f, pcy - ps), ImVec2(pcx + pt * 0.5f, pcy + ps), pc);
+        } else {
+            num++;
+            const std::string& in = s_pick_info[i];
+            const size_t d = in.find("   -   ");
+            if (d != std::string::npos) { l2 = in.substr(0, d); l1 = in.substr(d + 7); }
+            else { l1 = in.empty() ? s_pick_name[i] : in; }
+            int yy, mo, dd, hh, mi;   /* "2026-11-03  22:41" -> "03/11/2026  22:41" (a European release: day first) */
+            if (sscanf(l2.c_str(), "%d-%d-%d %d:%d", &yy, &mo, &dd, &hh, &mi) == 5) { char b[40]; snprintf(b, sizeof b, "%02d/%02d/%04d   %02d:%02d", dd, mo, yy, hh, mi); l2 = b; }
+            char nb[8]; snprintf(nb, sizeof nb, "%d", num);
+            tx(f1 * 1.15f, ImVec2(lx - tw(f1 * 1.15f, nb) * 0.5f, ry + (rh - f1 * 1.15f) * 0.5f), c1, nb);
+            const ImFontAtlasRectId ic = pick_icon(s_pick_name[i]);
+            ImFontAtlasRect rr;
+            const ImVec2 a(ix, ry + (rh - ih) * 0.5f), b(ix + iw, ry + (rh + ih) * 0.5f);
+            if (ic != ImFontAtlasRectId_Invalid && atlas->GetCustomRect(ic, &rr)) {
+                dl->AddImage(atlas->TexRef, a, b, rr.uv0, rr.uv1, sel ? IM_COL32_WHITE : IM_COL32(200, 200, 200, 255));
+                dl->AddRect(a, b, sel ? IM_COL32(198, 120, 22, 255) : IM_COL32(48, 61, 75, 255), 0.0f, 0, 1.5f * u);
+            } else dl->AddRect(a, b, IM_COL32(48, 61, 75, 255), 0.0f, 0, 1.5f * u);
+        }
+        if (l2.empty()) tx(f1, ImVec2(tx0, ry + (rh - f1) * 0.5f), c1, l1.c_str());
+        else { const float ty = ry + (rh - (f1 * 0.92f + f2 + 1.0f * u)) * 0.5f;   /* the two lines centred in the row */
+               tx(f1, ImVec2(tx0, ty), c1, l1.c_str()); tx(f2, ImVec2(tx0, ty + 1.0f * u + f1 * 0.92f), c2, l2.c_str()); }
+    }
+    const ImU32 oc = IM_COL32(176, 111, 36, 255);   /* more rows above / below: small orange arrows on the right */
+    const float ax = x0 + pw - 60.0f * u, aw = 9.0f * u;
+    if (s_pick_top > 0) { const float ay = y0 + head - 6.0f * u; dl->AddTriangleFilled(ImVec2(ax - aw, ay), ImVec2(ax + aw, ay), ImVec2(ax, ay - aw), oc); }
+    if (s_pick_top + vis < n) { const float ay = y0 + head + step * (float)vis + 4.0f * u; dl->AddTriangleFilled(ImVec2(ax - aw, ay), ImVec2(ax + aw, ay), ImVec2(ax, ay + aw), oc); }
+}
+
 void build_picker(float W, float H, float k)
 {
+    if (s_pick_alert) { build_alert(W, H); return; }
+    { const char* e = getenv("TOD_SAVE_PICKER_OLD"); if (!(e && e[0] == '1')) { build_picker_game(W, H); return; } }
     ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0, 0), ImVec2(W, H), IM_COL32(0, 0, 0, 170));
     const float pw = std::min(W - 40.0f * k, 760.0f * k);
     const int n = (int)s_pick_name.size();
@@ -1649,7 +2207,7 @@ void build_picker(float W, float H, float k)
                  ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav |
                  ImGuiWindowFlags_NoScrollbar);
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.98f, 0.62f, 0.16f, 1));
-    ImGui::TextUnformatted(s_pick_save ? "SAVE GAME - choose a slot" : "LOAD GAME - choose a save");
+    ImGui::TextUnformatted(!s_pick_title.empty() ? s_pick_title.c_str() : s_pick_save ? "SAVE GAME - choose a slot" : "LOAD GAME - choose a save");
     ImGui::PopStyleColor();
     ImGui::Separator();
     ImGui::BeginChild("##pick_list", ImVec2(0, ph - 110.0f * k), false, ImGuiWindowFlags_NoNav);
@@ -1731,7 +2289,11 @@ void overlay_render(void* devp, void* queuep, void* listp, uint64_t rtv, unsigne
     const bool un = update_notice_on(now_s());
     const bool vt = version_tag_on();
     const bool pk = s_pick_on.load();
-    if (!s_open.load() && !cm && !un && !vt && !pk && !s_tp_open.load()) return;
+    int mq_n; float mq_x, mq_y;
+    const bool mq = tod_fe_quit_state(&mq_n, &mq_x, &mq_y) != 0;   /* alert10: QUIT on the main menu bar */
+    const bool ph = tod_pause_hint_state() != 0;                  /* 10/11: hints under the pause lists (#25) */
+    const bool cl = combat_log_on();                              /* 10/11: TOD_COMBAT_LOG=2 */
+    if (!s_open.load() && !cm && !un && !vt && !pk && !s_tp_open.load() && !mq && !ph && !cl) return;
     if (!ensure_ready(devp, queuep, frames, w, h)) return;
     ImGuiIO& io = ImGui::GetIO();
     const float k = std::max(0.75f, std::min(3.0f, (float)h / 1080.0f));
@@ -1766,13 +2328,16 @@ void overlay_render(void* devp, void* queuep, void* listp, uint64_t rtv, unsigne
     const bool open = s_open.load() && !s_pick_on.load();     /* may have been closed by an action above */
     const bool pkd = s_pick_on.load();
     const bool tpo = s_tp_open.load() && !open && !pkd;
-    if (!open && !cm && !un && !vt && !pkd && !tpo) return;
+    if (!open && !cm && !un && !vt && !pkd && !tpo && !mq && !ph && !cl) return;
 
     ID3D12GraphicsCommandList* list = (ID3D12GraphicsCommandList*)listp;
     ImGui_ImplDX12_NewFrame();
     ImGui::NewFrame();
     if (open) build_page((float)w, (float)h, k);
     if (tpo) build_teleport((float)w, (float)h, k);
+    if (mq && !open) main_quit_draw((float)w, (float)h);   /* first: the picker's dimming covers it like the game's items (sp1) */
+    if (ph && !open && !pkd) pause_hint_draw((float)w, (float)h);
+    if (cl && !open && !pkd) combat_log_draw((float)w, (float)h);
     if (pkd) { build_picker((float)w, (float)h, k); s_pick_drawn.store(GetTickCount64()); }
     if (cm) fps_draw((float)w, k);
     if (un && !open && !pkd) update_notice_draw((float)h, k);
@@ -1785,6 +2350,13 @@ void overlay_render(void* devp, void* queuep, void* listp, uint64_t rtv, unsigne
 }
 
 }  // namespace
+
+/* 10/11: QUIT's width at 720p in the bar's font (face 1 at 0.51 of its line height), 0 when the game font is not loaded */
+extern "C" float tod_esci_w720(void)
+{
+    if (!gf_ok(1)) return 0.0f;
+    return gf_width(1, 0.51f * (float)s_gf[1].lh, tod_menu_text(143));
+}
 
 /* ---- entry points ---------------------------------------------------------- */
 
@@ -1812,6 +2384,80 @@ extern "C" void tod_overlay_pad_feed(uint32_t real_buttons)
         fprintf(stderr, "[overlay] SELECT held 2 s\n");
         set_open(true);
     }
+}
+
+/* quit125: QUIT GAME picked in the pause menu (src/ui/tod_settings_menu.cpp, bridge op 9, on the guest thread that runs the Lua
+ * script). The save-slot picker is the confirmation box: it is modal, takes the pad (cross / circle), the keyboard and the mouse,
+ * and keeps the game's frame going while the guest thread waits in it. 0 = back to the main menu (tod.exe starts again on the
+ * title screen: the game has no way back to it from a level), 1 = exit to Windows, 2 / circle = cancel (the pause menu stays).
+ * TOD_QUIT_SCRIPT="down,act" drives it in tests (same commands as TOD_SAVE_PICKER_SCRIPT). */
+extern "C" const char* tod_menu_text(int id);
+static std::string s_start_argv;           /* PS3_ARGV at start, for the restart */
+static void quit_to_title()
+{
+    char exe[MAX_PATH]; GetModuleFileNameA(NULL, exe, MAX_PATH);
+    std::string in = s_start_argv, out, tok;      /* drop -level <name> and -no_frontend: the title screen comes up */
+    std::vector<std::string> t; size_t pos = 0;
+    while (pos <= in.size()) { size_t c = in.find(';', pos); if (c == std::string::npos) c = in.size(); t.push_back(in.substr(pos, c - pos)); pos = c + 1; }
+    for (size_t i = 0; i < t.size(); i++) {
+        if (t[i].empty() || t[i] == "-no_frontend") continue;
+        if (t[i] == "-level" || t[i] == "-capfps") { i++; continue; }   /* -capfps <n>: main.cpp adds it again at start */
+        out += (out.empty() ? "" : ";") + t[i];
+    }
+    if (out.find("-no_legal") == std::string::npos) out = out.empty() ? "-no_legal" : "-no_legal;" + out;
+    _putenv_s("PS3_ARGV", out.c_str());
+    _putenv_s("TOD_LUA_EXEC", ""); _putenv_s("TOD_WARP", ""); _putenv_s("TOD_OVERLAY_SCRIPT", ""); _putenv_s("TOD_OVERLAY_AUTO", ""); _putenv_s("TOD_QUIT_SCRIPT", "");
+    STARTUPINFOA si = {}; si.cb = sizeof si; si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE); si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE); si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+    PROCESS_INFORMATION pi = {};
+    std::string cl = GetCommandLineA();
+    if (!CreateProcessA(exe, &cl[0], NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) { fprintf(stderr, "[quit] restart failed (%lu)\n", GetLastError()); return; }
+    fprintf(stderr, "[quit] back to the main menu: restarted as pid %lu (PS3_ARGV=%s)\n", pi.dwProcessId, out.c_str());
+    { char pf[MAX_PATH]; snprintf(pf, sizeof pf, "%s", exe); if (char* sl = strrchr(pf, 92)) strcpy(sl + 1, "teleport_pid.txt"); else strcpy(pf, "teleport_pid.txt");
+      if (FILE* f = fopen(pf, "w")) { fprintf(f, "%lu\n", pi.dwProcessId); fclose(f); } }
+    fflush(stderr);
+    TerminateProcess(GetCurrentProcess(), 0);
+}
+/* alert10: the game-style YES / NO box (build_alert). Blocks the calling thread like the slot picker (call it from the guest
+ * thread that runs the menu script, or any thread while the game keeps presenting). title / sub are UTF-8. Returns 1 YES,
+ * 0 NO or circle / Esc, -2 when it could not be shown. TOD_QUIT_SCRIPT="down,act" drives it in tests. */
+extern "C" int tod_alert(const char* title, const char* sub)
+{
+    const std::string y = tod_menu_text(152), no = tod_menu_text(153);
+    const char* names[2] = { y.c_str(), no.c_str() };
+    const char* infos[2] = { "", "" };
+    s_pick_title = title ? title : ""; s_alert_sub = sub ? sub : ""; s_pick_alert = true;
+    const char* qs = getenv("TOD_QUIT_SCRIPT");
+    std::string saved; const char* sp = getenv("TOD_SAVE_PICKER_SCRIPT"); if (sp) saved = sp;
+    _putenv_s("TOD_SAVE_PICKER_SCRIPT", qs ? qs : "");
+    fprintf(stderr, "[alert] %s\n", s_pick_title.c_str());
+    const int r = pick_hook(0, 2, names, infos, -1, 0);
+    _putenv_s("TOD_SAVE_PICKER_SCRIPT", saved.c_str());
+    s_pick_alert = false; s_pick_title.clear(); s_alert_sub.clear();
+    fprintf(stderr, "[alert] answer %s\n", r == 0 ? "yes" : r == -2 ? "not shown" : "no");
+    return r == 0 ? 1 : r == -2 ? -2 : 0;
+}
+
+/* alert10: leaving the Options page after changing a row that applies at the next start (bridge op 10). YES restarts on the
+ * title screen (the settings are already in tod.ini); in a level the second line warns about the progress. */
+extern "C" void tod_restart_open(void)
+{
+    const bool in_level = !tod_no_level_yet();
+    fprintf(stderr, "[restart] rows that need a restart were changed (%s)\n", in_level ? "in a level" : "main menu");
+    if (tod_alert(tod_menu_text(151), in_level ? tod_menu_text(148) : NULL) == 1) quit_to_title();
+}
+
+extern "C" void tod_quit_open(void)
+{
+    fprintf(stderr, "[quit] QUIT picked in the pause menu: back-to-title box\n");
+    if (tod_alert(tod_menu_text(149), tod_menu_text(148)) == 1) quit_to_title();
+}
+
+/* alert10: QUIT on the main menu: close the game. */
+extern "C" void tod_exit_open(void)
+{
+    fprintf(stderr, "[quit] QUIT picked on the main menu\n");
+    if (tod_alert(tod_menu_text(144), NULL) == 1) { fprintf(stderr, "[quit] exit to Windows\n"); fflush(stderr); HWND w = s_game_hwnd; if (w) PostMessageA(w, WM_CLOSE, 0, 0); else ExitProcess(0); }
 }
 
 extern "C" int tod_overlay_open(void) { return (s_open.load() || s_pick_on.load()) ? 1 : 0; }
@@ -1870,6 +2516,7 @@ extern "C" void tod_overlay_init(void)
     const char* off = getenv("TOD_OVERLAY");
     if (off && !strcmp(off, "0")) return;
     if (!s_cs_init) { InitializeCriticalSection(&s_cs); s_cs_init = true; }
+    { const char* av = getenv("PS3_ARGV"); s_start_argv = av ? av : ""; }   /* quit125 */
     if (const char* c = getenv("TOD_FPS_COUNTER")) s_fps_mode = std::max(0, std::min(2, atoi(c)));
     if (const char* sc = getenv("TOD_OVERLAY_SCRIPT")) {
         std::string all = sc; size_t pos = 0;

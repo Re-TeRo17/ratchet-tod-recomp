@@ -341,3 +341,37 @@ extern "C" void tod_menu_archive_ensure(const char* mods_dir)
         fprintf(stderr, "[menu] skipped: %s\n", e.what());
     }
 }
+
+/* alert10: read one file of the user's own global_cached.psarc (e.g. "/built/fonts/test/font1/font.dat"), nothing is copied
+ * anywhere. *data is malloc'ed (free it). Returns 1 on success, 0 when the archive or the entry is not there. */
+extern "C" int tod_game_archive_read(const char* entry, unsigned char** data, size_t* size)
+{
+    *data = NULL; *size = 0;
+    try {
+        std::error_code ec;
+        const char* vr = getenv("PS3_VFS_ROOT");
+        const fs::path root = (vr && *vr) ? fs::path(vr) : fs::path("game/disc");
+        fs::path src = root / "PS3_GAME" / "USRDIR" / "packed" / "game" / "global_cached.psarc";
+        if (!fs::is_regular_file(src, ec)) src = root / "USRDIR" / "packed" / "game" / "global_cached.psarc";
+        if (!fs::is_regular_file(src, ec)) return 0;
+        Psarc s;
+        s.open(src);
+        const Bytes man = s.extract(0);
+        std::string cur; uint32_t line = 0;
+        for (size_t i = 0; i <= man.size(); i++) {
+            if (i == man.size() || man[i] == '\n') {
+                while (!cur.empty() && (cur.back() == '\r' || cur.back() == '\0' || cur.back() == ' ')) cur.pop_back();
+                if (cur == entry) {
+                    const Bytes b = s.extract(line + 1);
+                    *data = (unsigned char*)malloc(b.size() ? b.size() : 1);
+                    if (!*data) return 0;
+                    if (!b.empty()) memcpy(*data, b.data(), b.size());
+                    *size = b.size();
+                    return 1;
+                }
+                cur.clear(); line++;
+            } else cur += (char)man[i];
+        }
+    } catch (...) {}
+    return 0;
+}

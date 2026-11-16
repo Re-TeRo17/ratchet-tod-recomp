@@ -1341,6 +1341,7 @@ static void fps_setup_argv(void)
 extern "C" void rsx_present_set_frame_shape(float aspect);
 extern "C" void tod_aspect_hor_install(float aspect);   /* src/stubs/aspect_hor.cpp */
 static float g_tod_aspect = 0.0f;       /* 0 = off */
+extern "C" float tod_aspect_frame(void) { return g_tod_aspect; }   /* 10/11: the overlay's main-menu QUIT (0 = pillarbox) */
 extern "C" float g_tod_ui_k = 1.0f;     /* TOD_ASPECT_UI: the HUD's width as a fraction of the frame ((16/9)/aspect), 1 = off; read by src/stubs/ui_xform.cpp */
 static bool parse_ratio(const char* s, float* out)
 {
@@ -1437,6 +1438,103 @@ extern "C" void tod_fps_apply_live(const char* v)
             n ? n : 75, lock ? " (locked)" : "", n > 75 ? n : 75, g_rsx_flip_pace_hz);
 }
 
+/* TOD_MENU_FPS=<n> (09/11, test, off by default): while the game is in a menu (the mode word at 0x10731D00 is not 0: pause,
+ * weapon vendor, weapons menu -- the same word aspect_hor.cpp uses), the FPS limit is <n>; back in the game the player's own
+ * TOD_FPS comes back. Why: the weapon vendor / weapons menu loses one piece of its UI for one frame every 90 frames at 60 fps
+ * (log\shop116: never at 30 fps, and not caused by RSX_LANES). TOD_MENU_FPS_LOG=1 logs each change of the mode word. */
+/* TOD_MENU_SYNC (default 1; 0 = off): in a menu (mode word not 0) the title's flip waits for the renderer to have read the
+ * frame (cellGcmSys.c gcm_flip_sync): the weapon vendor / weapons menu UI no longer loses a piece for a frame. */
+static volatile int s_in_menu_now;
+extern "C" int (*g_gcm_flip_sync_hook)(void);
+/* TOD_UI_SYNC_LOG=1 (diagnostic): a timeline of flips and UI quad writes in menus (first quad after each flip, then counts). */
+static int s_uis_log = -1; static unsigned s_uis_lines, s_uis_flips, s_uis_quads;
+static void uis_note(const char* what)
+{
+    if (s_uis_log < 0) { const char* e = getenv("TOD_UI_SYNC_LOG"); s_uis_log = (e && e[0] == '1'); }
+    if (!s_uis_log || !s_in_menu_now || s_uis_lines > 600 || s_uis_flips < 4200) return;
+    LARGE_INTEGER q, f; QueryPerformanceCounter(&q); QueryPerformanceFrequency(&f);
+    s_uis_lines++;
+    fprintf(stderr, "[uis] %.3f ms %s ppu_flips=%u presented=%ld quads=%u get=%08X put=%08X\n", q.QuadPart * 1000.0 / f.QuadPart, what,
+            s_uis_flips, g_frames_presented, s_uis_quads, vm_read32(ppu_hle_inject_base + 0x2004u), vm_read32(ppu_hle_inject_base + 0x2000u));
+}
+static int menu_sync_hook(void) { s_uis_flips++; uis_note("FLIP"); s_uis_quads = 0; return 0; }   /* the flip-time wait proved useless (get == put already) */
+static void fifo_kick(void);
+/* Called by func_00629180 (src/stubs/ui_sync.cpp) before a UI quad's vertices are written: in a menu, wake the walker and wait
+ * (at most 5 ms) until it has consumed everything queued (control get == put). */
+static int s_uis_park = 0, s_uis_maxms = 20;   /* default: wait for the walker to reach put, at most 20 ms (09/11 r_P20: no flicker, 3 timeouts in a session, 60 fps); TOD_UI_SYNC_PARK=1 stops when it parks, TOD_UI_SYNC_MAXMS=<n> */
+extern "C" int tod_menu_sync_on(void) { return s_in_menu_now; }
+extern "C" void tod_ui_sync_wait(void);
+extern "C" void tod_ui_pass_start(void) { tod_ui_sync_wait(); }
+extern "C" void tod_ui_sync_wait(void)
+{
+    if (!s_in_menu_now) return;
+    { static int i0; if (!i0) { i0 = 1; const char* e = getenv("TOD_UI_SYNC_PARK"); if (e) s_uis_park = (e[0] == '1'); e = getenv("TOD_UI_SYNC_MAXMS"); if (e && atoi(e) > 0) s_uis_maxms = atoi(e); } }
+    if (s_uis_log > 0 && s_uis_quads++ == 0) uis_note("first quad");
+    { static int off = -1; if (off < 0) { const char* e = getenv("TOD_UI_SYNC_WAIT"); off = (e && e[0] == '0'); } if (off) return; }
+    const uint32_t put = vm_read32(ppu_hle_inject_base + 0x2000u);
+    if (vm_read32(ppu_hle_inject_base + 0x2004u) == put) return;
+    fifo_kick();
+    LARGE_INTEGER f, t0, t; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0);
+    unsigned spins = 0;
+    uint32_t last_get = vm_read32(ppu_hle_inject_base + 0x2004u);
+    LARGE_INTEGER t_move = t0;
+    for (;;) {
+        const uint32_t get = vm_read32(ppu_hle_inject_base + 0x2004u);
+        if (get == put) break;
+        QueryPerformanceCounter(&t);
+        if (get != last_get) { last_get = get; t_move = t; }
+        /* the walker parked on a wait (a label the title writes later): what came before it is read; stop waiting */
+        else if (s_uis_park && (t.QuadPart - t_move.QuadPart) * 2000 > f.QuadPart) { static unsigned nst; nst++; if ((nst % 1000) == 1) fprintf(stderr, "[ui-sync] walker parked: %u times\n", nst); break; }
+        if ((t.QuadPart - t0.QuadPart) * 1000 > f.QuadPart * s_uis_maxms) { static unsigned nto; if (nto++ < 8) fprintf(stderr, "[ui-sync] timeout\n"); break; }
+        if (++spins < 64) YieldProcessor(); else { Sleep(0); if ((spins & 255) == 0) fifo_kick(); }
+    }
+    { static unsigned n; static double tot; QueryPerformanceCounter(&t); tot += (double)(t.QuadPart - t0.QuadPart) * 1000.0 / (double)f.QuadPart;
+      if (++n % 3000 == 1) fprintf(stderr, "[ui-sync] %u waits, %.3f ms average\n", n, tot / n); }
+}
+static void menu_fps_poll(void)
+{
+    { static int ms = -1;
+      if (ms < 0) { const char* e = getenv("TOD_MENU_SYNC"); ms = !(e && e[0] == '0'); if (ms) g_gcm_flip_sync_hook = menu_sync_hook;
+                    fprintf(stderr, "[menu-sync] TOD_MENU_SYNC=%d\n", ms); }
+      if (ms) s_in_menu_now = vm_read32(0x10731D00u) != 0; }
+    static int n = -1, lg = 0, in_menu = 0;
+    static uint32_t last_mode = 0xFFFFFFFFu;
+    static ULONGLONG t_last;
+    if (n < 0) {
+        const char* e = getenv("TOD_MENU_FPS"); n = e ? atoi(e) : 0; if (n < 10 || n > 1000) n = 0;
+        const char* l = getenv("TOD_MENU_FPS_LOG"); lg = (l && l[0] == '1') || n;
+        { const char* g = getenv("TOD_GT_LOG"); if (g && g[0] == '1') lg = 1; }
+        if (n) fprintf(stderr, "[menu-fps] TOD_MENU_FPS=%d: FPS limit %d while a menu is open\n", n, n);
+    }
+    if (!n && !lg) return;
+    const ULONGLONG t = GetTickCount64();
+    if (t - t_last < 100) return;
+    t_last = t;
+    const uint32_t mode = vm_read32(0x10731D00u);
+    { /* TOD_GT_LOG=1 (diagnostic, 09/11): every 5 s the wall time and the game's four clocks (Timer at 0x10731D00, clock k at
+       * +0x10+0x30*k: +4 dt, +0x14 total seconds; docs/FRAMERATE.md), to check the game speed at a given FPS limit. */
+      static int gl = -1; static ULONGLONG g0, gl_last;
+      if (gl < 0) { const char* e = getenv("TOD_GT_LOG"); gl = (e && e[0] == '1'); g0 = t; }
+      if (gl && t - gl_last >= 5000) {
+          gl_last = t;
+          auto rf = [](uint32_t a) { uint32_t u = vm_read32(a); float f; memcpy(&f, &u, 4); return (double)f; };
+          fprintf(stderr, "[gt] wall %.2f s | clk0 dt %.5f tot %.3f | clk1 dt %.5f tot %.3f | clk2 tot %.3f | clk3 tot %.3f | cap %.5f\n",
+                  (t - g0) / 1000.0, rf(0x10731D14u), rf(0x10731D24u), rf(0x10731D44u), rf(0x10731D54u), rf(0x10731D84u), rf(0x10731DB4u),
+                  rf(0x10731D04u));
+      } }
+    if (mode != last_mode) {
+        if (lg) fprintf(stderr, "[menu-fps] mode word 0x%08X -> 0x%08X\n", last_mode, mode);
+        last_mode = mode;
+    }
+    if (!n) return;
+    if (mode != 0 && !in_menu) {
+        char v[16]; snprintf(v, sizeof v, "%d", n);
+        tod_fps_apply_live(v); in_menu = 1;
+    } else if (mode == 0 && in_menu) {
+        tod_fps_apply_live(getenv("TOD_FPS")); in_menu = 0;   /* the player's limit (the F1 page keeps TOD_FPS current) */
+    }
+}
+
 /* Frame clock: vblank/flip ticks on QueryPerformanceCounter, sleeping on a
  * high-resolution waitable timer + the FIFO kick event. Vblank rate 60 Hz, or
  * TOD_FPS when above 60; TOD_VBLANK_HZ=<hz> overrides. */
@@ -1519,6 +1617,7 @@ static DWORD WINAPI frame_clock(LPVOID)
             fired++;
         }
         if (fired >= 240) next_tick = now;   /* fell too far behind -- resync */
+        menu_fps_poll();                     /* TOD_MENU_FPS (test, off by default) */
         BEACON_POP();
 
         if (rsx_ok) {

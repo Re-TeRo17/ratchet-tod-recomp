@@ -160,13 +160,13 @@ bool install_disc(const fs::path& base, const fs::path& source,
     const fs::path game = base / "game";
     const fs::path stage = game / "setup.partial";
     const fs::path stage_disc = stage / "disc";
-    fs::remove_all(stage, ec);
+    fs::remove_all(todsetup::long_path(stage), ec);
     fs::create_directories(stage_disc, ec);
     if (ec) {
         *err = "could not create " + utf8(stage) + ": " + ec.message();
         return false;
     }
-    auto cleanup = [&]() { std::error_code e; fs::remove_all(stage, e); };
+    auto cleanup = [&]() { std::error_code e; fs::remove_all(todsetup::long_path(stage), e); };
 
     if (!copy_disc(disc, stage_disc, [&](uint64_t d, uint64_t t) { return progress(d, t, "copying the disc"); }, err)) {
         cleanup();
@@ -178,6 +178,11 @@ bool install_disc(const fs::path& base, const fs::path& source,
     std::vector<uint8_t> self, elf;
     if (!read_file(stage_disc / "PS3_GAME/USRDIR/EBOOT.BIN", 256u << 20, &self)) {
         *err = "the copied disc has no PS3_GAME/USRDIR/EBOOT.BIN";
+        cleanup();
+        return false;
+    }
+    if (sha256_hex(self.data(), self.size()) != kEbootBinSha256) {   /* the copy is the checked file, not another one */
+        *err = "the copied EBOOT.BIN does not match the supported release";
         cleanup();
         return false;
     }
@@ -197,7 +202,7 @@ bool install_disc(const fs::path& base, const fs::path& source,
     const fs::path dest = game / "disc";
     fs::create_directories(dest, ec);
     fs::create_directories(base / "elf", ec);
-    fs::remove_all(dest / "PS3_GAME", ec);
+    fs::remove_all(todsetup::long_path(dest / "PS3_GAME"), ec);
     fs::remove(dest / "PS3_DISC.SFB", ec);
     fs::remove(base / kEbootElfRel, ec);
     fs::rename(stage_disc / "PS3_GAME", dest / "PS3_GAME", ec);

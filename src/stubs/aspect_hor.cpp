@@ -40,6 +40,15 @@ static void widen(uint32_t cam, int which)
         static int np; if (np < 4) { np++; fprintf(stderr, "[aspect-hor] cam 0x%08X set up in pause/menu mode: kept 16:9\n", cam); }
         return;
     }
+    /* 09/11 night: 0x10721700 is the menus' 2D camera (orthographic over the 1251.6 x 704 UI: P00 0.00160, P11 0.00284). Its
+     * draws are the Anark UI, which the renderer already narrows to the middle 16:9 (rsx_draw_engine.c, viewport of the UI
+     * vertex programs): widened here as well, the main menu's text was narrowed twice (21:9: OPZIONI ended at 1729 instead of
+     * 1868). It keeps its 16:9 projection, as in the pause. TOD_ASPECT_HOR_UICAM=1 widens it as before (comparison). */
+    if (cam == 0x10721700u) {
+        static int uc = -1;
+        if (uc < 0) { const char* e = getenv("TOD_ASPECT_HOR_UICAM"); uc = e && e[0] == '1'; }
+        if (!uc) return;
+    }
     const uint32_t m = cam + 0x110u;
     const float p00 = rdf(m), p11 = rdf(m + 0x14);
     if (!(fabsf(p00) > 1e-3f && fabsf(p11) > 1e-3f)) return;
