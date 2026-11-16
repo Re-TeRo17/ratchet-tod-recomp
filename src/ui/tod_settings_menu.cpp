@@ -120,6 +120,8 @@ const HRow kRowTab[] = {
     { "RSX_VSYNC",       72, 112, 2, { "1", "0" },                                       { 2, 1 },            0, 1 },
     { "TOD_FPS",         73, 113, 5, { NULL, "30", "60", "120", "1000" },                { 14, 15, 16, 17, 18 }, 0, 0 },
     { "TOD_FPS_COUNTER", 74, 114, 3, { "0", "1", "2" },                                  { 1, 19, 20 },       0, 1 },
+    /* 17/11 (user): difficulty, 5 steps around medium, applied live (src/stubs/diff_lock.cpp) */
+    { "TOD_DIFFICULTY",  95, 135, 5, { "story", "easy", NULL, "hard", "extreme" },        { 52, 53, 54, 55, 56 }, 2, 1 },
     { "TOD_PROMPTS",     75, 115, 7, { NULL, "ps3", "ps4", "ps5", "xbox", "switch", "keyboard" }, { 24, 37, 38, 39, 40, 41, 42 }, 0, 1 },
     { "PPU_AUDIO_BOOST", 76, 116, 2, { NULL, "0" },                                      { 2, 1 },            0, 0 },
     { "PS3_NO_FMV",      77, 117, 2, { NULL, "1" },                                      { 1, 2 },            0, 0 },
@@ -142,8 +144,8 @@ const HRow kRowTab[] = {
     { "!weapons",        92, 132, 2, { "0", "1" },                                       { 50, 51 },          0, 1 },
     /* 11/11 (user): the combat log on screen (src/stubs/combat_log.cpp; 2 = on-screen list + log lines, read every 30 polls) */
     { "TOD_COMBAT_LOG",  93, 133, 2, { NULL, "2" },                                      { 1, 2 },            0, 1 },
-    /* 11/11 (user): Mr. Zurkon as a weapon (src/stubs/tod_zurkon.cpp; the ARMI / DISPOSITIVI grids: kZurkonHook) */
-    { "TOD_ZURKON_WEAPON", 94, 134, 2, { NULL, "1" },                                    { 1, 2 },            0, 1 },
+    /* Mr. Zurkon as a weapon (TOD_ZURKON_WEAPON, src/stubs/tod_zurkon.cpp) has no row since 1.3.0 (unfinished: icon,
+     * equipment, shop); tod.ini can still turn it on for tests. */
 };
 const int kRows = (int)(sizeof kRowTab / sizeof kRowTab[0]);
 int s_idx[64];                                /* current choice of each row */

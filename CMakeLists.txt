@@ -143,7 +143,11 @@ endif()
 if(EXISTS "${RECOMP_DIR}/ppu_recomp_001.cpp")
     include("${CMAKE_CURRENT_SOURCE_DIR}/tools/combat_log_ppu_patch.cmake")
     tod_lift_rename("${RECOMP_DIR}/ppu_recomp_001.cpp" "${CMAKE_BINARY_DIR}/gen/ppu_diff/ppu_recomp_001.cpp" 002CDDA8 DIFF_PPU_001)
-    list(TRANSFORM RECOMP_SOURCES REPLACE "^${RECOMP_DIR}/ppu_recomp_001.cpp$" "${DIFF_PPU_001}")
+    # 17/11: the per-frame func_002CE5F0 too, so a menu change rebuilds the multipliers at once
+    tod_lift_rename("${DIFF_PPU_001}" "${CMAKE_BINARY_DIR}/gen/ppu_diff2/ppu_recomp_001.cpp" 002CE5F0 DIFF_PPU_001B)
+    # 17/11: the decrypter minigame step func_003B7AA8 (decrypt_fps.cpp, TOD_DECRYPT_FPS, issue #30)
+    tod_lift_rename("${DIFF_PPU_001B}" "${CMAKE_BINARY_DIR}/gen/ppu_dec30/ppu_recomp_001.cpp" 003B7AA8 DIFF_PPU_001C)
+    list(TRANSFORM RECOMP_SOURCES REPLACE "^${RECOMP_DIR}/ppu_recomp_001.cpp$" "${DIFF_PPU_001C}")
 endif()
 # 09/11: the menus' UI vertex copies (func_0081A728 from func_00629180) wait for the renderer at a new pass (vendor flicker)
 set(_P004 "")
@@ -289,6 +293,7 @@ set(PORT_SOURCES
     src/stubs/tod_zurkon.cpp         # 11/11: TOD_ZURKON_WEAPON (Mr. Zurkon as a weapon)
     src/stubs/armor_look.cpp         # 1.2.1: TOD_ARMOR_LOOK, TOD_REMOVE_HELMET (Ratchet's look with armor)
     src/stubs/diff_lock.cpp          # 16/11: TOD_DIFF_LOCK (dynamic difficulty locked at medium)
+    src/stubs/decrypt_fps.cpp        # 17/11: TOD_DECRYPT_FPS (decrypter minigame at 60 fps, issue #30)
     src/stubs/ui_sync.cpp            # 09/11: menus wait for the renderer before rewriting UI vertices (vendor flicker)
     src/kernel/edgezlib_native.cpp
     src/input/host_input.cpp

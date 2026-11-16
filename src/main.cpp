@@ -1491,6 +1491,37 @@ extern "C" void tod_ui_sync_wait(void)
     { static unsigned n; static double tot; QueryPerformanceCounter(&t); tot += (double)(t.QuadPart - t0.QuadPart) * 1000.0 / (double)f.QuadPart;
       if (++n % 3000 == 1) fprintf(stderr, "[ui-sync] %u waits, %.3f ms average\n", n, tot / n); }
 }
+/* TOD_DECRYPT_FPS=1 (17/11, issue #30, off in code, on in the packages' tod.ini): above 60 fps the decrypter minigame's ball does
+ * not move. decrypt_fps.cpp stamps g_tod_decrypt_tick at each minigame step; while the stamp is younger than 300 ms and the
+ * player's TOD_FPS is above 60 the limit is 60 (applied again if the F1 page changes it meanwhile), then the player's comes back. */
+extern "C" volatile unsigned long long g_tod_decrypt_tick;
+static void decrypt_fps_poll(void)
+{
+    static int on = -1, active = 0;
+    if (on < 0) { const char* e = getenv("TOD_DECRYPT_FPS"); on = e && e[0] == '1';
+                  if (on) fprintf(stderr, "[decrypt-fps] TOD_DECRYPT_FPS=1: 60 fps while the decrypter minigame runs\n"); }
+    if (!on) return;
+    static ULONGLONG t_last;
+    const ULONGLONG t = GetTickCount64();
+    if (t - t_last < 100) return;
+    t_last = t;
+    const bool run = (long long)(t - g_tod_decrypt_tick) < 300;   // signed: a stamp newer than t is "now", not a wrap
+    if (run) {
+        /* read every poll: if the player puts 60 or less on the F1 page meanwhile, that limit is already applied, so let go */
+        char v[16] = ""; GetEnvironmentVariableA("TOD_FPS", v, sizeof v);
+        if (!(atof(_strnicmp(v, "lock", 4) ? v : v + 4) > 60.0)) { active = 0; return; }   // 60 or less (or the original)
+        if (!active) {
+            fprintf(stderr, "[decrypt-fps] minigame: FPS limit 60\n");
+            active = 1;
+        }
+        if (g_target_fps != 60) tod_fps_apply_live("60");
+    } else if (active) {
+        active = 0;
+        char v[16] = ""; GetEnvironmentVariableA("TOD_FPS", v, sizeof v);
+        fprintf(stderr, "[decrypt-fps] minigame over: FPS limit %s\n", v[0] ? v : "(original)");
+        tod_fps_apply_live(v);   /* the player's limit (the F1 page keeps TOD_FPS current) */
+    }
+}
 static void menu_fps_poll(void)
 {
     { static int ms = -1;
@@ -1617,6 +1648,7 @@ static DWORD WINAPI frame_clock(LPVOID)
             fired++;
         }
         if (fired >= 240) next_tick = now;   /* fell too far behind -- resync */
+        decrypt_fps_poll();                  /* TOD_DECRYPT_FPS (issue #30) */
         menu_fps_poll();                     /* TOD_MENU_FPS (test, off by default) */
         BEACON_POP();
 

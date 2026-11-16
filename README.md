@@ -50,13 +50,14 @@ graphics by Direct3D 12. There is no emulation at run time.
 installer takes it from there.
 
 **Version 1.3.0 is out** (17 November 2026): QUIT in the menus, a new save picker, the game's own
-font in the port's menus, a locked medium difficulty, ultrawide menu and cutscene fixes, a fix for the
-missing HUD ring on Windows 10, and new options (combat log, controller swaps, all weapons in shops and
-more). See the [changelog](CHANGELOG.md). Thank you to the project's [supporters](#supporters)!
+font in the port's menus, a difficulty setting (medium by default), ultrawide menu and cutscene fixes, a fix
+for the missing HUD ring on Windows 10, the decrypter minigame fixed above 60 fps, and new options (combat
+log, controller swaps, all weapons in shops and more). See the [changelog](CHANGELOG.md). **The whole game
+has been played from start to finish on 1.3.0.** Thank you to the project's [supporters](#supporters)!
 Version 1.2.1 (8 November 2026) added real ultrawide and the PC settings in the game's own Options menu.
 Version 1.2.0 (7 November 2026) made the frame rate much steadier. Version 1.1 (4 November 2026) added a save slot list and the
 missing level voices. Version 1.0 was the first public release (2 November 2026; development started
-on 20 October 2026). The game is playable from the first planet onwards, but it is not finished: see
+on 20 October 2026). The game can be played from start to finish, but the port is not finished: see
 [Status](#status) and [Known issues](#known-issues) before you start.
 
 ## What's new in 1.3.0
@@ -64,15 +65,18 @@ on 20 October 2026). The game is playable from the first planet onwards, but it 
 - **QUIT** in the main menu and in the pause menu, with a confirmation (main menu / Windows / cancel),
   in 11 languages. Button hints in the pause menu.
 - **A new save picker** with thumbnails and a "New save" row, and the game's own font in the port's menus.
-- **Difficulty locked at medium** (`TOD_DIFF_LOCK`, on by default): the game's dynamic difficulty climbed
-  to the hardest level too fast in this port. `TOD_DIFF_LOCK = 0` gives the game's own back.
+- **Difficulty setting** (GAME OPTIONS > DIFFICULTY, `TOD_DIFFICULTY`): story, easy, medium (default), hard
+  or extreme, applied at once. The game's dynamic difficulty climbed to the hardest level too fast in this
+  port, so it is held at the level you pick; `TOD_DIFF_LOCK = 0` gives the game's own back.
+- **The decrypter minigame works above 60 fps** ([#30](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/30)):
+  the frame rate is held at 60 while it runs (`TOD_DECRYPT_FPS = 0` turns this off).
 - **Ultrawide:** movies and the main menu stay 16:9 without flicker, the 2D menu camera is 16:9, and
   the cutscene bars and fades cover the full width.
 - **The HUD ring missing on Windows 10** (and on GPUs without D3D12 OPTIONS8) is fixed; the vendor and
   weapon menu flicker is fixed; the on-screen prompts show your remapped keyboard keys.
 - **Options** are split into GAME OPTIONS and GRAPHICS OPTIONS, with an EXTRA > CHEAT page.
-- **New options, off by default:** combat log, all weapons in every shop, barefoot Ratchet, R1/R2 and
-  L1/L2 swap for the controller, and Mr. Zurkon as a weapon (experimental).
+- **New options, off by default:** combat log (beta), all weapons in every shop, barefoot Ratchet, and
+  R1/R2 and L1/L2 swap for the controller.
 - **Installer:** long paths and clearer read errors, plus safety checks.
 
 ## What's new in 1.2.0
@@ -334,7 +338,7 @@ changed in **F1 > Controls** (Enter or click a row, then press the new key), and
 | Area | State |
 |---|---|
 | Boot, menus, saving and loading | Works |
-| Playing through the planets | Works. Every level loads; the early game has been played a lot, the later planets less |
+| Playing through the planets | Works. The whole game has been played from start to finish on 1.3.0 |
 | Frame rate | 60 fps in most places at 1080p. At 4K with MSAA x8 on an RTX 3070 / Ryzen 5 3600 (1.2.0): average 59 fps over a 14-minute session at Sargasso, 57 fps in a heavy fight at Rykan V; the busiest fights (more than about 3000 draws per frame) can drop to about 50 fps |
 | Graphics | Direct3D 12 renderer, any internal resolution, MSAA/FXAA, anisotropic filtering, optional ray-traced ambient occlusion. A Vulkan renderer exists but is experimental (`RSX_BACKEND = vulkan`) |
 | Audio and music | Works. Low-latency output is off by default for stability |
@@ -350,7 +354,7 @@ changed in **F1 > Controls** (Enter or click a row, then press the new key), and
 
 ## Known issues
 
-Version 1.3.0 is playable from the first planet onwards, but a few rough edges remain.
+Version 1.3.0 has been played from start to finish, but a few rough edges remain.
 Everything below is on the list for the next updates. If you run into something that is not here,
 please [report it](#reporting-bugs).
 
@@ -360,13 +364,12 @@ please [report it](#reporting-bugs).
   so a lower resolution helps them little.
 - **Video memory:** if other programs use a lot of the GPU's memory, Windows gives the game less, and a
   short stutter can happen when a heavy scene starts.
-- **Decrypter minigame:** it can get stuck above 60 fps.
 - **Kreeli Comet:** Clank and the key may flicker.
 - **The port's own menus have no sounds** (the game's menus do).
 - **Barefoot Ratchet** (`TOD_BAREFOOT`) asks for a restart when you change it.
-- **Mr. Zurkon as a weapon** (`TOD_ZURKON_WEAPON`) is experimental: no icon in the weapon box yet, and he
-  is not sold in shops.
-- **Difficulty:** it is locked at medium for now; a proper fix of the game's dynamic difficulty is planned.
+- **Combat log** (`TOD_COMBAT_LOG`) is a beta.
+- **Difficulty:** it stays at the level picked in GAME OPTIONS; a proper fix of the game's dynamic
+  difficulty is planned.
 - **Clank's rocket boost:** its smoke can appear late the first time it is used.
 - **Clank on Ratchet's back** may disappear for a moment at some camera angles (being looked at).
 - **Short pauses** on autosave (about 0.4 s, down from 0.6 s) and while a level or a cutscene loads.

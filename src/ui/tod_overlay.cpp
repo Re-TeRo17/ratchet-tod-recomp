@@ -287,6 +287,10 @@ void init_rows()
           { { NULL, "Auto" }, { "ps3", "PlayStation 3" }, { "ps4", "PlayStation 4" }, { "ps5", "PlayStation 5" },
             { "xbox", "Xbox" }, { "switch", "Nintendo Switch" }, { "keyboard", "Keyboard" } },
           0, true, TAB_SYSTEM });
+    add({ "TOD_DIFFICULTY", "Difficulty",
+          "Story: enemies deal half damage and your weapons deal double. Extreme: the reverse. Medium is the game's own balance.",
+          { { "story", "Story" }, { "easy", "Easy" }, { NULL, "Medium" }, { "hard", "Hard" }, { "extreme", "Extreme" } },
+          2, true, TAB_SYSTEM });
     add({ "TOD_ARMOR_LOOK", "Armor look",
           "Hidden: Ratchet keeps his normal suit whatever armor is equipped (the armor still protects him; saves are unchanged).",
           { { NULL, "Shown" }, { "hidden", "Hidden" } }, 0, true, TAB_SYSTEM });
