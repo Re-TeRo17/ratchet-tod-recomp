@@ -412,9 +412,6 @@ filing a new report.
 
 What comes next. Plans, not promises: there are no dates.
 
-- **Rock-solid 60 fps** (in progress): a steady 60 fps in the busiest fights too, with no drops and no hitches.
-- **Up to 120 fps** (planned): higher frame rates for high refresh rate monitors, with the game running
-  at the right speed.
 - **DLSS and FSR** (planned): upscaling, so 4K and high frame rates fit on more graphics cards.
 - **Ray tracing** (planned): ray-traced lighting effects on top of the original look, as an option.
 - **Visual fixes** (in progress): the problems listed under [Known issues](#known-issues), starting with
