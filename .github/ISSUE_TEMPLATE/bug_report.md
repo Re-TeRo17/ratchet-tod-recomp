@@ -17,7 +17,7 @@ labels: bug
 - Windows version:
 - CPU (model) and GPU (model + driver version):
 - RAM:
-- Release version (shown in the F1 page title, e.g. 1.2.1):
+- Release version (shown in the F1 page title, e.g. 1.3.0):
 - Game files: decrypted .iso / disc folder; made with (PS3 Disc Dumper, ps3dec...); the installer confirmed BCES00052 v01.00: yes / no
 - Controller or keyboard:
 

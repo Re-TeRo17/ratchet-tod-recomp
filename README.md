@@ -9,7 +9,7 @@ Direct3D 12, up to 4K and 60 fps.
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-blue)
 ![Renderer](https://img.shields.io/badge/renderer-Direct3D%2012-green)
-![Version](https://img.shields.io/badge/version-1.2.1-orange)
+![Version](https://img.shields.io/badge/version-1.3.0-orange)
 ![Game](https://img.shields.io/badge/game-BCES00052%20(EU)-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-yellow)
 [![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/S4jd7643mg)
@@ -49,24 +49,31 @@ graphics by Direct3D 12. There is no emulation at run time.
 **Nothing of the game is in this download.** You need your own copy of the game (the disc). The
 installer takes it from there.
 
-**Version 1.2.1 is out** (8 November 2026): real ultrawide, the PC settings in the game's own
-Options menu, armor and helmet options and Kreeli Comet's fog fixed. See the [changelog](CHANGELOG.md). Thank you to the project's [supporters](#supporters)!
+**Version 1.3.0 is out** (17 November 2026): QUIT in the menus, a new save picker, the game's own
+font in the port's menus, a locked medium difficulty, ultrawide menu and cutscene fixes, a fix for the
+missing HUD ring on Windows 10, and new options (combat log, controller swaps, all weapons in shops and
+more). See the [changelog](CHANGELOG.md). Thank you to the project's [supporters](#supporters)!
+Version 1.2.1 (8 November 2026) added real ultrawide and the PC settings in the game's own Options menu.
 Version 1.2.0 (7 November 2026) made the frame rate much steadier. Version 1.1 (4 November 2026) added a save slot list and the
 missing level voices. Version 1.0 was the first public release (2 November 2026; development started
 on 20 October 2026). The game is playable from the first planet onwards, but it is not finished: see
 [Status](#status) and [Known issues](#known-issues) before you start.
 
-## What's new in 1.2.1
+## What's new in 1.3.0
 
-- **Real ultrawide.** At 21:9, 3440x1440 and 32:9 the game shows a wider view instead of a stretched
-  picture; the HUD, the weapon wheel and the menus stay 16:9 in the middle. F1 > Video > Aspect ratio
-  (or `TOD_ASPECT` in `tod.ini`); off by default.
-- **The PC settings in the game's own Options menu**, from the main menu and the pause menu. The game
-  prepares the menu from your copy at the first start; nothing else to install.
-- **Armor look and Remove helmet** in F1 > System and in Options: hide the armor, or keep it and take
-  only the helmet off (the armor still protects Ratchet).
-- **Kreeli Comet's ground fog** is a soft haze again, as on the PS3, instead of a flat light-blue sheet.
-- A clearer notice when a new version is available, and Crop black bars in F1 > Video.
+- **QUIT** in the main menu and in the pause menu, with a confirmation (main menu / Windows / cancel),
+  in 11 languages. Button hints in the pause menu.
+- **A new save picker** with thumbnails and a "New save" row, and the game's own font in the port's menus.
+- **Difficulty locked at medium** (`TOD_DIFF_LOCK`, on by default): the game's dynamic difficulty climbed
+  to the hardest level too fast in this port. `TOD_DIFF_LOCK = 0` gives the game's own back.
+- **Ultrawide:** movies and the main menu stay 16:9 without flicker, the 2D menu camera is 16:9, and
+  the cutscene bars and fades cover the full width.
+- **The HUD ring missing on Windows 10** (and on GPUs without D3D12 OPTIONS8) is fixed; the vendor and
+  weapon menu flicker is fixed; the on-screen prompts show your remapped keyboard keys.
+- **Options** are split into GAME OPTIONS and GRAPHICS OPTIONS, with an EXTRA > CHEAT page.
+- **New options, off by default:** combat log, all weapons in every shop, barefoot Ratchet, R1/R2 and
+  L1/L2 swap for the controller, and Mr. Zurkon as a weapon (experimental).
+- **Installer:** long paths and clearer read errors, plus safety checks.
 
 ## What's new in 1.2.0
 
@@ -162,7 +169,7 @@ link and it can be added here.</sub>
 
 ## Quick start
 
-1. **Download** `tod-recomp-1.2.1-win64.zip` from the
+1. **Download** `tod-recomp-1.3.0-win64.zip` from the
    [Releases](https://github.com/Re-TeRo17/ratchet-tod-recomp/releases) page and unzip it anywhere
    except `Program Files`.
 2. Run **`Install.bat`**, pick your **decrypted** `.iso` or disc folder (European disc, BCES00052) and
@@ -210,7 +217,7 @@ welcome.
 
 ## Installing
 
-1. Download `tod-recomp-1.2.1-win64.zip` from the
+1. Download `tod-recomp-1.3.0-win64.zip` from the
    [Releases](https://github.com/Re-TeRo17/ratchet-tod-recomp/releases) page and unzip it
    anywhere you like **except** `Program Files` (the game writes its saves and shader cache next to
    `tod.exe`). About 24 GB must be free on that drive.
@@ -233,10 +240,10 @@ installed files are in [docs/SETTINGS.md](docs/SETTINGS.md#installer-updates-and
 
 **Updating from an older version:** from 1.1 on, run **`Update.bat`** in the game folder: it checks
 GitHub, asks before doing anything, downloads the new version and replaces only the port's files. To
-update by hand instead (and to go from 1.0 to 1.2.1, since 1.0 has no `Update.bat`):
+update by hand instead (and to go from 1.0 to 1.3.0, since 1.0 has no `Update.bat`):
 
 1. Close the game.
-2. Open the 1.2.1 zip. Inside there is a folder `tod-recomp-1.2.1`: copy **everything inside it** into
+2. Open the 1.3.0 zip. Inside there is a folder `tod-recomp-1.3.0`: copy **everything inside it** into
    your game folder (the one with `tod.exe`). When Windows asks, choose **Replace the files in the
    destination**.
 3. Start the game with `Play.bat` as usual.
@@ -343,7 +350,7 @@ changed in **F1 > Controls** (Enter or click a row, then press the new key), and
 
 ## Known issues
 
-Version 1.2.1 is playable from the first planet onwards, but a few rough edges remain.
+Version 1.3.0 is playable from the first planet onwards, but a few rough edges remain.
 Everything below is on the list for the next updates. If you run into something that is not here,
 please [report it](#reporting-bugs).
 
@@ -353,7 +360,13 @@ please [report it](#reporting-bugs).
   so a lower resolution helps them little.
 - **Video memory:** if other programs use a lot of the GPU's memory, Windows gives the game less, and a
   short stutter can happen when a heavy scene starts.
-- **Weapon vendor and weapons menu:** they flicker briefly every 1.5 seconds (being worked on).
+- **Decrypter minigame:** it can get stuck above 60 fps.
+- **Kreeli Comet:** Clank and the key may flicker.
+- **The port's own menus have no sounds** (the game's menus do).
+- **Barefoot Ratchet** (`TOD_BAREFOOT`) asks for a restart when you change it.
+- **Mr. Zurkon as a weapon** (`TOD_ZURKON_WEAPON`) is experimental: no icon in the weapon box yet, and he
+  is not sold in shops.
+- **Difficulty:** it is locked at medium for now; a proper fix of the game's dynamic difficulty is planned.
 - **Clank's rocket boost:** its smoke can appear late the first time it is used.
 - **Clank on Ratchet's back** may disappear for a moment at some camera angles (being looked at).
 - **Short pauses** on autosave (about 0.4 s, down from 0.6 s) and while a level or a cutscene loads.
@@ -406,7 +419,7 @@ of this you include, the faster it can be fixed:
 1. **What happened**, what you expected, and **where** (planet / level name, what you were doing).
 2. **A screenshot or short clip** if it is visual (Windows' Win+Alt+PrtScn or Xbox Game Bar, or
    `Win+Shift+S`).
-3. **Your setup**: Windows version, CPU, GPU and driver version, RAM, the release version (1.2.1), and
+3. **Your setup**: Windows version, CPU, GPU and driver version, RAM, the release version (1.3.0), and
    which disc dump you used (decrypted `.iso` or folder).
 4. **Your settings**: attach `tod.ini` (resolution scale, MSAA, FPS limit, language...).
 5. **The log**: `log\tod.log` from right after the problem (before you start the game again: the

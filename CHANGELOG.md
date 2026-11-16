@@ -1,5 +1,58 @@
 # Changelog
 
+## 1.3.0 (17 November 2026)
+
+**QUIT in the menus, a new save picker, a locked medium difficulty and many ultrawide and menu fixes.**
+Unzip it over 1.2.1 (or run `Update.bat`): your settings and saves are kept.
+
+### Gameplay
+
+- **Difficulty locked at medium (`TOD_DIFF_LOCK`, on by default):** the game's dynamic difficulty climbs to
+  the hardest level too fast in this port, so it is held at medium. `TOD_DIFF_LOCK = 0` gives the game's own
+  dynamic difficulty back. A proper fix is planned.
+- **Cheat page (Options > EXTRA > CHEAT):** god mode, infinite ammo, heal, bolts and all weapons at maximum.
+- **New game options, off by default** (Options > GAME OPTIONS, and F1):
+  - **Combat log** (`TOD_COMBAT_LOG`: `0` off, `2` on screen): the damage you deal, kills and XP per weapon.
+  - **All weapons in every shop** (`TOD_SHOP_ALL_WEAPONS`: `0` off, `1` on, `2` on with the RYNO).
+  - **Barefoot Ratchet** (`TOD_BAREFOOT = 1`). Known issue: it asks for a restart.
+  - **Controller swaps** ([#26](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/26)): `TOD_PAD_SWAP_R1R2 = 1` and `TOD_PAD_SWAP_L1L2 = 1` trade R1/R2 and
+    L1/L2 on every controller.
+  - **Mr. Zurkon as a weapon** (`TOD_ZURKON_WEAPON = 1`), **experimental**: no icon in the weapon box yet and
+    he is not sold in shops.
+
+### Menus
+
+- **QUIT** in the main menu and in the pause menu, with a confirmation (main menu / Windows / cancel), in 11
+  languages ([#25](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/25)).
+- **Button hints in the pause menu** ([#25](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/25)).
+- **A new save picker:** thumbnails and a "New save" row (`TOD_SAVE_PICKER_OLD = 1` brings the old list back).
+- **The game's own font** in the port's menus (`TOD_GAME_FONT = 0` turns it off).
+- **Options split** in GAME OPTIONS and GRAPHICS OPTIONS.
+- **On-screen prompts show your remapped keyboard keys** ([#21](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/21)).
+
+### Display
+
+- **Ultrawide:** the 2D menu camera is 16:9; movies and the main menu stay 16:9 without flicker, and the
+  cutscene bars and fades cover the full width ([#3](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/3); `TOD_UI_FULLRECT = 0` turns the full-width bars off).
+
+### Bug fixes
+
+- **The HUD ring missing on Windows 10** and on GPUs without D3D12 OPTIONS8: the textures are converted
+  ([#28](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/28), probably also [#31](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/31)).
+- **The weapon vendor and weapons menu no longer flicker** (`TOD_MENU_SYNC = 0` turns the fix off).
+
+### Other
+
+- **Installer:** long paths work, a read error now says why ([#20](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/20)), and it runs safety checks.
+- Credits: a new supporter and the Discord invite.
+
+### Known issues
+
+- The decrypter minigame can get stuck above 60 fps.
+- Clank and the key flicker at Kreeli Comet.
+- The port's own menus have no sounds.
+- Small frame drops in heavy fights: 60 fps is not yet rock solid at 4K with MSAA x8.
+
 ## 1.2.1 (8 November 2026)
 
 **Real ultrawide and the PC settings in the game's own Options menu.** Unzip it over 1.2.0 (or run
