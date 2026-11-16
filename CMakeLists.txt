@@ -292,7 +292,7 @@ set(PORT_SOURCES
     src/stubs/combat_log.cpp         # 10/11: TOD_COMBAT_LOG (damage sent/applied, XP per weapon)
     src/stubs/tod_zurkon.cpp         # 11/11: TOD_ZURKON_WEAPON (Mr. Zurkon as a weapon)
     src/stubs/armor_look.cpp         # 1.2.1: TOD_ARMOR_LOOK, TOD_REMOVE_HELMET (Ratchet's look with armor)
-    src/stubs/diff_lock.cpp          # 16/11: TOD_DIFF_LOCK (dynamic difficulty locked at medium)
+    src/stubs/diff_lock.cpp          # 16/11: TOD_DIFF_LOCK, TOD_DIFFICULTY (dynamic difficulty held at the chosen level)
     src/stubs/decrypt_fps.cpp        # 17/11: TOD_DECRYPT_FPS (decrypter minigame at 60 fps, issue #30)
     src/stubs/ui_sync.cpp            # 09/11: menus wait for the renderer before rewriting UI vertices (vendor flicker)
     src/kernel/edgezlib_native.cpp

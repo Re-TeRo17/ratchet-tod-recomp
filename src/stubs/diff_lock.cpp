@@ -1,5 +1,5 @@
 /*
- * diff_lock.cpp (16/11) -- TOD_DIFF_LOCK: lock the game's dynamic difficulty at medium.
+ * diff_lock.cpp (16/11) -- TOD_DIFF_LOCK: hold the game's dynamic difficulty at the TOD_DIFFICULTY level.
  *
  * The game keeps a difficulty struct S = [r2-0xEA8] (0x101E8D70 seen) and a tuning table T = [r2-0xEA0]+0x10000.
  * func_002CDDA8 rebuilds the multipliers from the rating r = max(0, S+0 + S+4): ratio = (r - T.FA8 centre) / T.FA8,

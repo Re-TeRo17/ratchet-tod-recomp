@@ -42,14 +42,15 @@ borderless window, VSync on, 60 fps target, English.
 | `TOD_PROMPTS` | Button icons: `auto` (follows the last used device), `ps3`, `ps4`, `ps5`, `xbox`, `switch`, `keyboard`. |
 | `TOD_ARMOR_LOOK` | 1.2.1: `hidden` = Ratchet keeps his normal suit whatever armor is equipped (the armor still protects him; saves are unchanged). F1 > System and Options; applies at once. |
 | `TOD_REMOVE_HELMET` | 1.2.1: `1` = Ratchet takes the armor's helmet off and shows his face (the armor stays and still protects him). F1 > System and Options; applies at once. |
-| `TOD_DIFF_LOCK` | 1.3.0: `1` (default) = the game's dynamic difficulty is locked at medium; `0` = the game's own dynamic difficulty (it climbs to the hardest level too fast in this port; a fix is planned). Applies at once. |
+| `TOD_DIFFICULTY` | 1.3.0: `story`, `easy`, `medium` (default), `hard` or `extreme`. Options > GAME OPTIONS > DIFFICULTY; applies at once. Used while `TOD_DIFF_LOCK` is on. |
+| `TOD_DIFF_LOCK` | 1.3.0: `1` (default) = the game's dynamic difficulty is held at the `TOD_DIFFICULTY` level; `0` = the game's own dynamic difficulty (it climbs to the hardest level too fast in this port; a fix is planned). Applies at once. |
+| `TOD_DECRYPT_FPS` | 1.3.0 ([#30](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/30)): `1` (set in the shipped `tod.ini`) = the frame rate is held at 60 while the decrypter minigame runs, when `TOD_FPS` is above 60; `0` = off. |
 | `TOD_GAME_FONT` | 1.3.0: the game's own font in the port's menus (on by default; `0` = off). |
 | `TOD_SAVE_PICKER_OLD` | 1.3.0: `1` = the old save list instead of the new one with thumbnails and a "New save" row. |
 | `TOD_COMBAT_LOG` | 1.3.0, off by default: `2` = on-screen damage, kills and XP per weapon (`1` also writes the lines to the log). Options > GAME OPTIONS. |
 | `TOD_SHOP_ALL_WEAPONS` | 1.3.0, off by default: `1` = all weapons in every shop, `2` = the RYNO too. |
 | `TOD_BAREFOOT` | 1.3.0, off by default: `1` = Ratchet goes barefoot. Applies at the next start. |
 | `TOD_PAD_SWAP_R1R2`, `TOD_PAD_SWAP_L1L2` | 1.3.0, off by default ([#26](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/26)): `1` = R1 and R2 (or L1 and L2) trade places on every controller. F1 > System. |
-| `TOD_ZURKON_WEAPON` | 1.3.0, experimental, off by default: `1` = Mr. Zurkon as a weapon (no icon in the weapon box yet, not in shops). |
 | `TOD_UI_FULLRECT` | 1.3.0: ultrawide cutscene bars and fades at full width (on by default; `0` = off). |
 | `TOD_MENU_SYNC` | 1.3.0: the fix for the vendor and weapon menu flicker (on by default; `0` = off). |
 | `PS3_LANG` | Game language, see below. |
