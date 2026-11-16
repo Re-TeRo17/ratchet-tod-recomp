@@ -2,57 +2,84 @@
 
 ## 1.3.0 (17 November 2026)
 
-**QUIT in the menus, a new save picker, a difficulty setting and many ultrawide and menu fixes.**
+**Renderer speed-ups for big fights, QUIT in the menus, a new save picker, a difficulty selector and many fixes.**
 The whole game has been played from start to finish on this version.
 Unzip it over 1.2.1 (or run `Update.bat`): your settings and saves are kept.
 
+### Performance
+
+- **Seven renderer speed-ups for big fights, on by default.** They keep depth
+  snapshots and small render targets instead of making them again every frame, and let the render threads
+  look up colour surfaces without waiting for each other. The heaviest fights can still drop below 60 fps.
+  Each one can be turned off in `tod.ini` (`RSX_ZSNAP_KEEP`, `RSX_ZSNAP_ALT`, `RSX_GOV_MINKB`,
+  `RSX_LANES_ZDEM_ASK`, `RSX_LANES_ZPRESS_PCT`, `RSX_SURFVIEW_LAZYZOWN`, `RSX_SURFVIEW_LAZYCOLOR`; see
+  [docs/SETTINGS.md](docs/SETTINGS.md)), or all the speed-ups at once with `TOD_PERF_DEFAULTS=0`.
+
+### Controls
+
+- **Swap R1 with R2 and L1 with L2** ([#26](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/26)): GAME OPTIONS, or `TOD_PAD_SWAP_R1R2 = 1` and
+  `TOD_PAD_SWAP_L1L2 = 1`. It works on every controller, and the analog pressure moves with the button
+  (on a DualSense, fire on R2 keeps its analog trigger). `PAD_MAP` remaps any button for advanced users.
+
 ### Gameplay
 
-- **Difficulty setting (Options > GAME OPTIONS > DIFFICULTY, `TOD_DIFFICULTY`):** story, easy, medium
-  (default), hard or extreme, applied at once (enemy damage from x0.5 to x2). The game's dynamic difficulty
-  climbs to the hardest level too fast in this port, so it is held at the level you pick.
-  `TOD_DIFF_LOCK = 0` gives the game's own dynamic difficulty back. A proper fix is planned.
+- **Difficulty selector (Options > GAME OPTIONS > DIFFICULTY, `TOD_DIFFICULTY`):** the original game has a
+  dynamic difficulty that changes with how fast you play, and in this port it climbed to the hardest level
+  too fast. Now everyone can pick the difficulty they like, at any time: story, easy, medium (default), hard
+  or extreme, applied at once. `TOD_DIFF_LOCK = 0` gives the game's own dynamic difficulty back; a fix for
+  it is planned.
 - **Cheat page (Options > EXTRA > CHEAT):** god mode, infinite ammo, heal, bolts and all weapons at maximum.
 - **New game options, off by default** (Options > GAME OPTIONS, and F1):
   - **Combat log, beta** (`TOD_COMBAT_LOG`: `0` off, `2` on screen): the damage you deal, kills and XP per weapon.
   - **All weapons in every shop** (`TOD_SHOP_ALL_WEAPONS`: `0` off, `1` on, `2` on with the RYNO).
-  - **Barefoot Ratchet** (`TOD_BAREFOOT = 1`). Known issue: it asks for a restart.
-  - **Controller swaps** ([#26](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/26)): `TOD_PAD_SWAP_R1R2 = 1` and `TOD_PAD_SWAP_L1L2 = 1` trade R1/R2 and
-    L1/L2 on every controller.
+  - **Barefoot Ratchet** (`TOD_BAREFOOT = 1`): a nod to the first game on Veldin. Only with the base suit;
+    it needs a restart.
 
 ### Menus
 
 - **QUIT** in the main menu and in the pause menu, with a confirmation (main menu / Windows / cancel), in 11
-  languages ([#25](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/25)).
+  languages ([#25](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/25)). The main menu bar is spaced
+  for each language, so the longer words fit.
 - **Button hints in the pause menu** ([#25](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/25)).
 - **A new save picker:** thumbnails and a "New save" row (`TOD_SAVE_PICKER_OLD = 1` brings the old list back).
 - **The game's own font** in the port's menus (`TOD_GAME_FONT = 0` turns it off).
 - **Options split** in GAME OPTIONS and GRAPHICS OPTIONS.
-- **On-screen prompts show your remapped keyboard keys** ([#21](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/21)).
+- **Restart prompt:** when you leave Options after changing a setting that needs a restart, the game asks
+  whether to restart now.
 
 ### Display
 
-- **Ultrawide:** the 2D menu camera is 16:9; movies and the main menu stay 16:9 without flicker, and the
-  cutscene bars and fades cover the full width ([#3](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/3); `TOD_UI_FULLRECT = 0` turns the full-width bars off).
+- **Ultrawide:** the 2D menu camera is 16:9.
 
 ### Bug fixes
 
 - **The decrypter minigame** got stuck above 60 fps ([#30](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/30)):
-  the frame rate is now held at 60 while it runs (`TOD_DECRYPT_FPS = 0` turns this off).
-- **The HUD ring missing on Windows 10** and on GPUs without D3D12 OPTIONS8: the textures are converted
-  ([#28](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/28), probably also [#31](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/31)).
-- **The weapon vendor and weapons menu no longer flicker** (`TOD_MENU_SYNC = 0` turns the fix off).
+  the frame rate is now held at 60 while it runs. On by default, also when you update and keep your old
+  `tod.ini` (`TOD_DECRYPT_FPS = 0` turns it off).
+- **Rykan V arrival movie:** the shader map has 5 more pipelines (1724), so the movie's sky and fog are ready
+  from the first frame also with an empty shader cache.
+- **The HUD ring was missing on Windows 10** and on GPUs without D3D12 OPTIONS8: the textures are now
+  converted ([#28](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/28)).
+- **The weapon vendor and weapons menu flickered** (`TOD_MENU_SYNC = 0` turns the fix off).
+- **Ultrawide: movies and the main menu flickered**; they now stay 16:9 without flicker ([#3](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/3)).
+- **Ultrawide: the cutscene bars and fades** did not cover the full width ([#3](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/3);
+  `TOD_UI_FULLRECT = 0` turns the full-width bars off).
+- **On-screen prompts showed the default keyboard keys** after a remap; they now show your keys, and they
+  change at once when you rebind ([#21](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/21)).
+- **Installer:** paths longer than 260 characters failed, and a read error gave no reason ([#20](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/20)).
+- **The difficulty climbed to the hardest level too fast:** see the difficulty selector above.
 
 ### Other
 
-- **Installer:** long paths work, a read error now says why ([#20](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/20)), and it runs safety checks.
+- **Installer safety checks:** disc names and paths are checked, nothing is written outside the install
+  folder, and the copied `EBOOT.BIN` is checked again before it is decrypted.
 - Credits: a new supporter and the Discord invite.
 
 ### Known issues
 
 - Clank and the key flicker at Kreeli Comet.
 - The port's own menus have no sounds.
-- Small frame drops in heavy fights: 60 fps is not yet rock solid at 4K with MSAA x8.
+- Some frame drops are left in the heaviest fights: 60 fps is not yet rock solid at 4K with MSAA x8.
 
 ## 1.2.1 (8 November 2026)
 

@@ -44,7 +44,7 @@ borderless window, VSync on, 60 fps target, English.
 | `TOD_REMOVE_HELMET` | 1.2.1: `1` = Ratchet takes the armor's helmet off and shows his face (the armor stays and still protects him). F1 > System and Options; applies at once. |
 | `TOD_DIFFICULTY` | 1.3.0: `story`, `easy`, `medium` (default), `hard` or `extreme`. Options > GAME OPTIONS > DIFFICULTY; applies at once. Used while `TOD_DIFF_LOCK` is on. |
 | `TOD_DIFF_LOCK` | 1.3.0: `1` (default) = the game's dynamic difficulty is held at the `TOD_DIFFICULTY` level; `0` = the game's own dynamic difficulty (it climbs to the hardest level too fast in this port; a fix is planned). Applies at once. |
-| `TOD_DECRYPT_FPS` | 1.3.0 ([#30](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/30)): `1` (set in the shipped `tod.ini`) = the frame rate is held at 60 while the decrypter minigame runs, when `TOD_FPS` is above 60; `0` = off. |
+| `TOD_DECRYPT_FPS` | 1.3.0 ([#30](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/30)): `1` (default) = the frame rate is held at 60 while the decrypter minigame runs, when `TOD_FPS` is above 60; `0` = off. |
 | `TOD_GAME_FONT` | 1.3.0: the game's own font in the port's menus (on by default; `0` = off). |
 | `TOD_SAVE_PICKER_OLD` | 1.3.0: `1` = the old save list instead of the new one with thumbnails and a "New save" row. |
 | `TOD_COMBAT_LOG` | 1.3.0, off by default: `2` = on-screen damage, kills and XP per weapon (`1` also writes the lines to the log). Options > GAME OPTIONS. |
@@ -59,6 +59,7 @@ borderless window, VSync on, 60 fps target, English.
 | `TOD_LEVEL_STREAMS` | 1.1: the dialogue and ambient sound some levels stream from separate files (on by default; 0 = off). |
 | `RSX_VCKEY_NODEF`, `RSX_TEXMASK_MEMO`, `RSX_FPSCAN_MEMO`, `TOD_COLL_HAND` | 1.1 speed-ups, all on by default. If something looks wrong on your PC, set one to 0 at a time and tell me which one helped. |
 | `TOD_PERF_DEFAULTS` | 1.2.0 speed-ups (multi-threaded renderer, native collision, video-memory savings, frame pacing), all on by default. `TOD_PERF_DEFAULTS=0` as an environment variable goes back to 1.1; each one also has its own key (`RSX_LANES`, `RSX_RT_HEAP`, `RSX_VRAM_GOV`, `RSX_PACE_VBLANK`...). The native collision engine (`SPU_COLL_RING`) starts before `tod.ini` is read, so it can be turned off only as an environment variable. |
+| `RSX_ZSNAP_KEEP`, `RSX_ZSNAP_ALT`, `RSX_GOV_MINKB`, `RSX_LANES_ZDEM_ASK`, `RSX_LANES_ZPRESS_PCT`, `RSX_SURFVIEW_LAZYZOWN`, `RSX_SURFVIEW_LAZYCOLOR` | 1.3.0 speed-ups for big fights, on by default (part of `TOD_PERF_DEFAULTS`). Defaults: `1`, `1`, `4096`, `1`, `97`, `1`, `1`. To turn one off: `0` (for `RSX_LANES_ZPRESS_PCT`, `80` is the 1.2 value). If something looks wrong on your PC, turn them off one at a time and tell me which one helped. |
 | `TOD_PCORES` | 1.2.0: on Intel CPUs with P-cores and E-cores the game runs on the P-cores only (on by default; 0 = off). |
 | `TOD_SHADER_PREWARM` | 1.2.0: 0 skips building the shipped pipelines before the game starts. |
 | `RSX_CROP_BARS` | 1.2.0: 8 cuts the thin black bars at the top and bottom (as on the PS3) and stretches the picture 2.3% taller (off by default). |

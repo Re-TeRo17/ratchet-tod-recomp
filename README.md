@@ -35,7 +35,7 @@ Direct3D 12, up to 4K and 60 fps.
 
 <a href="https://discord.gg/S4jd7643mg"><img src="docs/images/nav_discord_wide.png" alt="Join the Discord" width="758"></a>
 
-<sub><a href="#whats-new-in-121">What's new</a> | <a href="#screenshots">Screenshots</a> | <a href="#quick-start">Quick start</a> | <a href="#requirements">Requirements</a> | <a href="#controls">Controls</a> | <a href="#status">Status</a> | <a href="#roadmap">Roadmap</a> | <a href="docs/BUILDING.md">Building</a> | <a href="#supporters">Supporters</a> | <a href="#credits">Credits</a></sub>
+<sub><a href="#whats-new-in-130">What's new</a> | <a href="#screenshots">Screenshots</a> | <a href="#quick-start">Quick start</a> | <a href="#requirements">Requirements</a> | <a href="#controls">Controls</a> | <a href="#status">Status</a> | <a href="#roadmap">Roadmap</a> | <a href="docs/BUILDING.md">Building</a> | <a href="#supporters">Supporters</a> | <a href="#credits">Credits</a></sub>
 
 </div>
 
@@ -49,10 +49,11 @@ graphics by Direct3D 12. There is no emulation at run time.
 **Nothing of the game is in this download.** You need your own copy of the game (the disc). The
 installer takes it from there.
 
-**Version 1.3.0 is out** (17 November 2026): QUIT in the menus, a new save picker, the game's own
-font in the port's menus, a difficulty setting (medium by default), ultrawide menu and cutscene fixes, a fix
-for the missing HUD ring on Windows 10, the decrypter minigame fixed above 60 fps, and new options (combat
-log, controller swaps, all weapons in shops and more). See the [changelog](CHANGELOG.md). **The whole game
+**Version 1.3.0 is out** (17 November 2026): renderer speed-ups for big fights, QUIT in the menus, a new
+save picker, the game's own font in the port's menus, a difficulty selector (medium by default), R1/R2 and
+L1/L2 swaps, and new options (combat log, all weapons in shops, barefoot Ratchet). It also fixes the decrypter minigame above 60 fps, the
+missing HUD ring on Windows 10, the vendor menu flicker, the ultrawide movies and cutscene bars, the
+keyboard prompts after a remap, the Rykan V movie fog and the installer with long paths. See the [changelog](CHANGELOG.md). **The whole game
 has been played from start to finish on 1.3.0.** Thank you to the project's [supporters](#supporters)!
 Version 1.2.1 (8 November 2026) added real ultrawide and the PC settings in the game's own Options menu.
 Version 1.2.0 (7 November 2026) made the frame rate much steadier. Version 1.1 (4 November 2026) added a save slot list and the
@@ -62,22 +63,30 @@ on 20 October 2026). The game can be played from start to finish, but the port i
 
 ## What's new in 1.3.0
 
+- **Seven renderer speed-ups for big fights, on by default.** The heaviest fights can still drop below
+  60 fps. Each one can be turned off in `tod.ini` (see [docs/SETTINGS.md](docs/SETTINGS.md)), or all the
+  speed-ups at once with `TOD_PERF_DEFAULTS=0`.
+- **Swap R1 with R2 and L1 with L2** ([#26](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/26)):
+  GAME OPTIONS, on every controller, and the analog pressure moves with the button.
 - **QUIT** in the main menu and in the pause menu, with a confirmation (main menu / Windows / cancel),
   in 11 languages. Button hints in the pause menu.
 - **A new save picker** with thumbnails and a "New save" row, and the game's own font in the port's menus.
-- **Difficulty setting** (GAME OPTIONS > DIFFICULTY, `TOD_DIFFICULTY`): story, easy, medium (default), hard
-  or extreme, applied at once. The game's dynamic difficulty climbed to the hardest level too fast in this
-  port, so it is held at the level you pick; `TOD_DIFF_LOCK = 0` gives the game's own back.
+- **Difficulty selector** (GAME OPTIONS > DIFFICULTY, `TOD_DIFFICULTY`): the original game has a dynamic
+  difficulty that changes with how fast you play, and in this port it climbed to the hardest level too
+  fast. Now everyone can pick the difficulty they like, at any time: story, easy, medium (default), hard
+  or extreme, applied at once. `TOD_DIFF_LOCK = 0` gives the game's own dynamic difficulty back.
 - **The decrypter minigame works above 60 fps** ([#30](https://github.com/Re-TeRo17/ratchet-tod-recomp/issues/30)):
   the frame rate is held at 60 while it runs (`TOD_DECRYPT_FPS = 0` turns this off).
-- **Ultrawide:** movies and the main menu stay 16:9 without flicker, the 2D menu camera is 16:9, and
-  the cutscene bars and fades cover the full width.
-- **The HUD ring missing on Windows 10** (and on GPUs without D3D12 OPTIONS8) is fixed; the vendor and
-  weapon menu flicker is fixed; the on-screen prompts show your remapped keyboard keys.
-- **Options** are split into GAME OPTIONS and GRAPHICS OPTIONS, with an EXTRA > CHEAT page.
-- **New options, off by default:** combat log (beta), all weapons in every shop, barefoot Ratchet, and
-  R1/R2 and L1/L2 swap for the controller.
-- **Installer:** long paths and clearer read errors, plus safety checks.
+- **Fixes:** the HUD ring missing on Windows 10 (and on GPUs without D3D12 OPTIONS8); the weapon vendor
+  and weapons menu flicker; in ultrawide, the flicker of movies and of the main menu and the cutscene bars
+  and fades that did not cover the full width (the 2D menu camera is now 16:9 too); the on-screen prompts,
+  which now show your remapped keyboard keys; the sky and fog of the Rykan V arrival movie with an empty
+  shader cache; the installer with long paths and its read errors.
+- **Options** are split into GAME OPTIONS and GRAPHICS OPTIONS, with an EXTRA > CHEAT page; leaving
+  Options after a change that needs a restart asks whether to restart now.
+- **New options, off by default:** combat log (beta), all weapons in every shop, and barefoot Ratchet,
+  a nod to the first game on Veldin (base suit only, needs a restart).
+- **Installer safety checks** on the disc names, the paths and the copied `EBOOT.BIN`.
 
 ## What's new in 1.2.0
 
@@ -366,10 +375,11 @@ please [report it](#reporting-bugs).
   short stutter can happen when a heavy scene starts.
 - **Kreeli Comet:** Clank and the key may flicker.
 - **The port's own menus have no sounds** (the game's menus do).
-- **Barefoot Ratchet** (`TOD_BAREFOOT`) asks for a restart when you change it.
+- **Barefoot Ratchet** (`TOD_BAREFOOT`) needs a restart and only works with the base suit.
+- **Some frame drops are left in the heaviest fights:** 60 fps is not yet rock solid at 4K with MSAA x8.
 - **Combat log** (`TOD_COMBAT_LOG`) is a beta.
-- **Difficulty:** it stays at the level picked in GAME OPTIONS; a proper fix of the game's dynamic
-  difficulty is planned.
+- **The game's own dynamic difficulty** (`TOD_DIFF_LOCK = 0`) still climbs too fast; by default the
+  difficulty stays at the level picked in GAME OPTIONS. A fix is planned.
 - **Clank's rocket boost:** its smoke can appear late the first time it is used.
 - **Clank on Ratchet's back** may disappear for a moment at some camera angles (being looked at).
 - **Short pauses** on autosave (about 0.4 s, down from 0.6 s) and while a level or a cutscene loads.
@@ -408,7 +418,7 @@ What comes next. Plans, not promises: there are no dates.
 - **DLSS and FSR** (planned): upscaling, so 4K and high frame rates fit on more graphics cards.
 - **Ray tracing** (planned): ray-traced lighting effects on top of the original look, as an option.
 - **Visual fixes** (in progress): the problems listed under [Known issues](#known-issues), starting with
-  the flicker in the weapon vendor screen.
+  the Clank flicker at Kreeli Comet.
 - **Simpler installer** (planned): install and update with one program, without the `.bat` files.
 
 News: [@Re_TeRo17 on X](https://x.com/Re_TeRo17) and the [Discord](https://discord.gg/S4jd7643mg).

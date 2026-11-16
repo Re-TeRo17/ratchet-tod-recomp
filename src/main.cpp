@@ -1491,7 +1491,7 @@ extern "C" void tod_ui_sync_wait(void)
     { static unsigned n; static double tot; QueryPerformanceCounter(&t); tot += (double)(t.QuadPart - t0.QuadPart) * 1000.0 / (double)f.QuadPart;
       if (++n % 3000 == 1) fprintf(stderr, "[ui-sync] %u waits, %.3f ms average\n", n, tot / n); }
 }
-/* TOD_DECRYPT_FPS=1 (17/11, issue #30, off in code, on in the packages' tod.ini): above 60 fps the decrypter minigame's ball does
+/* TOD_DECRYPT_FPS=1 (17/11, issue #30, on by default since 1.3.0): above 60 fps the decrypter minigame's ball does
  * not move. decrypt_fps.cpp stamps g_tod_decrypt_tick at each minigame step; while the stamp is younger than 300 ms and the
  * player's TOD_FPS is above 60 the limit is 60 (applied again if the F1 page changes it meanwhile), then the player's comes back. */
 extern "C" volatile unsigned long long g_tod_decrypt_tick;
@@ -2206,9 +2206,15 @@ int main(int argc, char** argv)
               {"RSX_LANES_VCPRO", "1"}, {"RSX_RT_HEAP", "1"}, {"RSX_RT_HEAP_SPARE", "1"}, {"RSX_RT_HEAP_NOJOIN", "1"}, {"RSX_MS_NO_SHADOW", "28"},
               {"RSX_DISP_DIRECT", "1"}, {"RSX_LANES_K", "32"}, {"SPU_COLL_RING", "3"}, {"SPU_COLL_RING_IGN12", "1"}, {"TOD_FFA8_HAND", "1"},
               {"TOD_D647_HAND", "1"}, {"SPURS_PM_STARVE_MS", "40"}, {"ANIM_HLE_WD_FAST", "250"},
+              /* Release 1.3.0: the seven levers of the user's test package test_130 (played to the end, 15-16/11) */
+              {"RSX_ZSNAP_KEEP", "1"}, {"RSX_GOV_MINKB", "4096"}, {"RSX_LANES_ZDEM_ASK", "1"}, {"RSX_LANES_ZPRESS_PCT", "97"},
+              {"RSX_SURFVIEW_LAZYZOWN", "1"}, {"RSX_ZSNAP_ALT", "1"}, {"RSX_SURFVIEW_LAZYCOLOR", "1"},
           };
           for (const auto& kv : kPerf) set_default_env(kv[0], kv[1]);
       } }
+    /* TOD_DECRYPT_FPS (issue #30): on by default since 1.3.0, so that users who update and keep their old tod.ini get it too;
+     * TOD_DECRYPT_FPS = 0 in tod.ini turns it off. */
+    set_default_env("TOD_DECRYPT_FPS", "1");
     /* RSX subchannel 1 is NV0039 (memory-to-memory copy) in libgcm's layout, which this title uses; the runtime now routes
      * each subchannel by the object bound to it (cellGcmSys.c gcm_sub1_observe) instead of a per-title switch, so nothing
      * to set here. GCM_SUBCH1_2D=1/0 in the environment pins subchannel 1 to NV0039 / NV4097. */
