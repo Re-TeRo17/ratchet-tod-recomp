@@ -281,8 +281,10 @@ endif()
 set(TOD_IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui")
 set(TOD_IMGUI_SOURCES
     "${TOD_IMGUI_DIR}/imgui.cpp" "${TOD_IMGUI_DIR}/imgui_draw.cpp"
-    "${TOD_IMGUI_DIR}/imgui_tables.cpp" "${TOD_IMGUI_DIR}/imgui_widgets.cpp"
-    "${TOD_IMGUI_DIR}/backends/imgui_impl_dx12.cpp")
+    "${TOD_IMGUI_DIR}/imgui_tables.cpp" "${TOD_IMGUI_DIR}/imgui_widgets.cpp")
+if(WIN32)
+    list(APPEND TOD_IMGUI_SOURCES "${TOD_IMGUI_DIR}/backends/imgui_impl_dx12.cpp")
+endif()
 set(PORT_SOURCES
     src/main.cpp
     src/stubs/missing_hle.cpp
@@ -323,6 +325,12 @@ set(PORT_SOURCES
 )
 if(TOD_COLL_SYNC)
     list(APPEND PORT_SOURCES src/stubs/coll_sync.cpp)   # q89: SPU_COLL_SYNC, func_004A3288 (synchronous collision slot)
+endif()
+# macOS / Linux: the D3D12 overlay is replaced by its entry points (src/ui/tod_overlay_stub.cpp) until a
+# renderer there has an overlay of its own; src/platform/ fills the Win32 gaps of win32_compat.h.
+if(NOT WIN32)
+    list(REMOVE_ITEM PORT_SOURCES src/ui/tod_overlay.cpp)
+    list(APPEND PORT_SOURCES src/ui/tod_overlay_stub.cpp src/platform/tod_platform_posix.cpp)
 endif()
 
 # Exe icon: res/tod.ico (the project's own artwork); a local/tod.ico (gitignored, never committed) overrides it.
@@ -449,6 +457,10 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE ps3recomp_runtime)
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 
+if(APPLE)
+    # CoreText/CoreGraphics: keycap labels of the button prompts (src/patches/prompts.cpp).
+    target_link_libraries(${PROJECT_NAME} PRIVATE "-framework CoreText" "-framework CoreGraphics" "-framework CoreFoundation")
+endif()
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE dbghelp user32 gdi32 winmm d3d12 dxgi)
     # Console program by default while bringing the port up (logs on stdout/stderr).

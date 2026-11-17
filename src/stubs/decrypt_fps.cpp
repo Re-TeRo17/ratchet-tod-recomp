@@ -12,7 +12,7 @@
 #include "ppu_recomp.h"
 
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+#include "platform/tod_platform.h"   /* <windows.h> on Windows */
 
 void func_003B7AA8_lifted(ppu_context* ctx);
 

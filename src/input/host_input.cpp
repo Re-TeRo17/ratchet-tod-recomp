@@ -19,8 +19,13 @@
 #include <string>
 #include <vector>
 #include <thread>
+#if defined(__APPLE__)
+#include <sys/sysctl.h>
+#include <sys/time.h>
+#include <unistd.h>
+#endif
 
-#include "win32_compat.h"
+#include "platform/tod_platform.h"   /* <windows.h> on Windows; VK_* and key state elsewhere */
 #include "cellPad.h"   /* has its own extern "C" */
 #include "input/key_bindings.h"
 
@@ -180,9 +185,9 @@ void fmv_skip_poll(int focused, uint16_t kbd_script_buttons)
  * so the picture lines up with the [fx] / [cheat] lines. Captured from the screen on its own
  * thread (the window as DWM shows it), so the pad poll never waits. Max 400 shots. */
 extern "C" uint32_t g_rsx_engine_frame;
+#ifdef _WIN32
 void r1_capture(HWND w, std::string path)
 {
-#ifdef _WIN32
     RECT r; if (!GetClientRect(w, &r) || r.right <= 0 || r.bottom <= 0) return;
     POINT o = { 0, 0 }; ClientToScreen(w, &o);
     const int sw = r.right, sh = r.bottom;
@@ -207,8 +212,8 @@ void r1_capture(HWND w, std::string path)
     }
     if (bmp) DeleteObject(bmp);
     DeleteDC(mem); ReleaseDC(nullptr, scr);
-#endif
 }
+#endif
 void r1_shot_poll(int focused, uint16_t kbd_script_buttons)
 {
 #ifdef _WIN32
@@ -381,14 +386,23 @@ int poll(int focused, uint16_t* btn, uint8_t* rx, uint8_t* ry)
     if (!s_fake.empty()) {
         static double up0 = -1;   /* seconds since the process started (what a run script's clock shows) */
         if (up0 < 0) {
-            FILETIME cr, ex, kr, us, nowft;
             up0 = 0;
+#ifdef _WIN32
+            FILETIME cr, ex, kr, us, nowft;
             if (GetProcessTimes(GetCurrentProcess(), &cr, &ex, &kr, &us)) {
                 GetSystemTimeAsFileTime(&nowft);
                 const unsigned long long c = ((unsigned long long)cr.dwHighDateTime << 32) | cr.dwLowDateTime;
                 const unsigned long long n = ((unsigned long long)nowft.dwHighDateTime << 32) | nowft.dwLowDateTime;
                 up0 = (double)(n - c) / 1e7;
             }
+#elif defined(__APPLE__)
+            struct kinfo_proc kp; size_t len = sizeof kp; int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, (int)getpid() };
+            if (sysctl(mib, 4, &kp, &len, nullptr, 0) == 0) {
+                struct timeval nowtv; gettimeofday(&nowtv, nullptr);
+                const struct timeval st = kp.kp_proc.p_starttime;
+                up0 = (double)(nowtv.tv_sec - st.tv_sec) + (double)(nowtv.tv_usec - st.tv_usec) / 1e6;
+            }
+#endif
             up0 -= (double)t / 1e6;   /* uptime = up0 + t */
         }
         const double ts = up0 + (double)t / 1e6;

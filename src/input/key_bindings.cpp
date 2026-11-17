@@ -7,7 +7,7 @@
 #include <string.h>
 #include <vector>
 
-#include "win32_compat.h"
+#include "platform/tod_platform.h"   /* <windows.h> on Windows; VK_* and key state elsewhere */
 #include "cellPad.h"   /* CELL_PAD_CTRL_*, has its own extern "C" */
 
 namespace kb {
