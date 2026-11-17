@@ -8,6 +8,7 @@
  * Off unless the command is used.
  */
 #define WIN32_LEAN_AND_MEAN
+#ifdef _WIN32
 #include <windows.h>
 #include <dbghelp.h>
 #include <stdint.h>
@@ -150,3 +151,11 @@ extern "C" void tod_rwatch_dump(void)
         }
     }
 }
+#else   /* the page-guard read watch uses Windows vectored exception handling; not available here yet */
+#include <stdint.h>
+#include <stdio.h>
+extern "C" void tod_rwatch_arm2(uint32_t ea, int exact) { (void)ea; (void)exact; fprintf(stderr, "[rwatch] not supported on this platform\n"); }
+extern "C" void tod_rwatch_arm(uint32_t ea) { tod_rwatch_arm2(ea, 0); }
+extern "C" void tod_wwatch_arm(uint32_t ea) { tod_rwatch_arm2(ea, 1); }
+extern "C" void tod_rwatch_dump(void) {}
+#endif

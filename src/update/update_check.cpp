@@ -3,6 +3,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
+#ifdef _WIN32
 #include <windows.h>
 #include <winhttp.h>
 #include <shellapi.h>
@@ -153,3 +154,9 @@ extern "C" void tod_update_open_page(void)
 {
     ShellExecuteA(NULL, "open", TOD_RELEASES_URL, NULL, NULL, SW_SHOWNORMAL);
 }
+#else   /* WinHTTP above; no HTTPS client on this host yet, so the check stays off (state 0). */
+extern "C" void tod_update_check_start(void) {}
+extern "C" int tod_update_state(void) { return 0; }
+extern "C" const char* tod_update_latest(void) { return ""; }
+extern "C" void tod_update_open_page(void) {}
+#endif

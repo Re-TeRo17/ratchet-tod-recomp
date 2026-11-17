@@ -45,7 +45,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <windows.h>
+#include "platform/tod_platform.h"   /* <windows.h> on Windows */
 #include "ppu_recomp.h"
 
 extern "C" {

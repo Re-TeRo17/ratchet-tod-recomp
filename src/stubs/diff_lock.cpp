@@ -28,7 +28,7 @@
 #include <string.h>
 
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+#include "platform/tod_platform.h"   /* <windows.h> on Windows */
 
 void func_002CDDA8_lifted(ppu_context* ctx);
 void func_002CE5F0_lifted(ppu_context* ctx);

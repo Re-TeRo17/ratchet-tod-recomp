@@ -43,6 +43,10 @@
 #include "cellPad.h"
 #include "prompts_data.h"   /* gen/: kPromptPng_<set>, from src/res/prompts */
 #include "win32_compat.h"
+#if defined(__APPLE__)
+#include <CoreText/CoreText.h>
+#include <CoreGraphics/CoreGraphics.h>
+#endif
 #include "input/key_bindings.h"
 
 namespace {
@@ -129,6 +133,7 @@ std::string cap_label(int vk)
 }
 
 /* Text coverage (0..255) of `label` in Segoe UI Bold at `px` pixels, its ink box cropped; w/h out. */
+#if defined(_WIN32)
 std::vector<uint8_t> text_cov(const std::string& label, int px, int* w, int* h)
 {
     const int W = 1024, H = 256;
@@ -168,6 +173,56 @@ std::vector<uint8_t> text_cov(const std::string& label, int px, int* w, int* h)
     if (dc) DeleteDC(dc);
     return cov;
 }
+#elif defined(__APPLE__)
+std::vector<uint8_t> text_cov(const std::string& label, int px, int* w, int* h)
+{
+    /* macOS: the system UI font, bold, drawn white on black into an 8-bit grey bitmap. */
+    const int W = 1024, H = 256;
+    std::vector<uint8_t> cov, buf((size_t)W * H, 0);
+    *w = *h = 0;
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceGray();
+    CGContextRef cg = CGBitmapContextCreate(buf.data(), W, H, 8, W, cs, kCGImageAlphaNone);
+    CGColorSpaceRelease(cs);
+    if (!cg) return cov;
+    CTFontRef font = CTFontCreateUIFontForLanguage(kCTFontUIFontEmphasizedSystem, (CGFloat)px, NULL);
+    CFStringRef str = CFStringCreateWithBytes(NULL, (const UInt8*)label.data(), (CFIndex)label.size(), kCFStringEncodingUTF8, false);
+    if (font && str) {
+        CGContextSetGrayFillColor(cg, 1.0, 1.0);
+        CGContextSetShouldAntialias(cg, true);
+        const void* keys[] = { kCTFontAttributeName, kCTForegroundColorFromContextAttributeName };
+        const void* vals[] = { font, kCFBooleanTrue };
+        CFDictionaryRef attrs = CFDictionaryCreate(NULL, keys, vals, 2, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFAttributedStringRef as = CFAttributedStringCreate(NULL, str, attrs);
+        CTLineRef line = CTLineCreateWithAttributedString(as);
+        CGContextSetTextPosition(cg, 16, H - 16 - px);   /* CG's origin is bottom-left */
+        CTLineDraw(line, cg);
+        CGContextFlush(cg);
+        CFRelease(line); CFRelease(as); CFRelease(attrs);
+        /* the bitmap's first row is the top row */
+        const uint8_t* b = buf.data();
+        int lx = W, ly = H, hx = -1, hy = -1;
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++)
+                if (b[(size_t)y * W + x]) { if (x < lx) lx = x; if (x > hx) hx = x; if (y < ly) ly = y; if (y > hy) hy = y; }
+        if (hx >= lx) {
+            *w = hx - lx + 1; *h = hy - ly + 1;
+            cov.resize((size_t)*w * *h);
+            for (int y = 0; y < *h; y++)
+                for (int x = 0; x < *w; x++) cov[(size_t)y * *w + x] = b[(size_t)(ly + y) * W + lx + x];
+        }
+    }
+    if (str) CFRelease(str);
+    if (font) CFRelease(font);
+    CGContextRelease(cg);
+    return cov;
+}
+#else
+std::vector<uint8_t> text_cov(const std::string& label, int px, int* w, int* h)
+{
+    (void)label; (void)px; *w = *h = 0;   /* no font rasteriser on this host yet: the cap keeps its face */
+    return {};
+}
+#endif
 
 /* Paints a key cap's face again and writes `label` on it, on the RGBA master (kMasterScale x the atlas). */
 void relabel_cap(std::vector<uint8_t>& m, float x0, float y0, float x1, float y1, float size, const std::string& label)

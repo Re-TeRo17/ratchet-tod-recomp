@@ -18,7 +18,7 @@
 #include "ps3emu/vm_watch.h"             /* texture write-watch (vm_watch_init, vm_commit_reserved) */
 #include "ps3emu/beacon.h"               /* walker / presenter phase beacons */
 #include "rsx_logv2.h"                   /* logv2: the structured second log (stall events) */
-#include "win32_compat.h"                /* Sleep, CreateThread, VirtualAlloc... (<windows.h> on Windows) */
+#include "platform/tod_platform.h"      /* win32_compat.h: Sleep, CreateThread, VirtualAlloc... (<windows.h> on Windows) */
 
 #include <stdint.h>
 #include <stdio.h>
@@ -31,6 +31,9 @@
 #include <stdarg.h>
 #include <exception>
 #include <filesystem>
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>   /* _NSGetExecutablePath */
+#endif
 #include "settings.h"                    /* tod.ini */
 #include "install/install.h"             /* --install / --check */
 #include "update/update_check.h"         /* TOD_RELEASE_VERSION, the update check */
@@ -1215,6 +1218,7 @@ static void waitdiag_note(ppu_context* ctx, uint64_t usec)
 static void tod_usleep_pre(ppu_context* ctx, uint64_t* usec)
 {
     waitdiag_note(ctx, *usec);
+#ifdef _WIN32   /* the synth tick diagnostics and AUDIO_SYN_SPIN use QPC, thread cycle counters and waitable timers */
     if ((uint32_t)ctx->lr != 0x006F1BA0u) return;
     { /* AUDIO_SYN_PERIOD_LOG=<ms>: the synth tick's own cadence (aud103). One line per gap between two of its sleeps longer than <ms>,
        * on the same clock as the [audio-gap] lines (QPC ms), with the sleep it asked for and the RSX frame. */
@@ -1240,6 +1244,7 @@ static void tod_usleep_pre(ppu_context* ctx, uint64_t* usec)
           LARGE_INTEGER n; do { YieldProcessor(); QueryPerformanceCounter(&n); } while (n.QuadPart < deadline);
           *usec = 0;
       } }
+#endif
 }
 
 #ifdef _WIN32
@@ -2134,11 +2139,22 @@ int main(int argc, char** argv)
          * that has the files itself (the development runs) is kept. */
         std::string missing;
         if (!tod_files_in(".", &missing)) {
+#ifdef _WIN32
             wchar_t m[MAX_PATH];
             const DWORD n = GetModuleFileNameW(NULL, m, MAX_PATH);
             const std::filesystem::path exe_dir = (n && n < MAX_PATH) ? std::filesystem::path(m).parent_path() : std::filesystem::path();
             if (!exe_dir.empty() && tod_files_in(exe_dir, NULL) && SetCurrentDirectoryW(exe_dir.c_str()))
                 fprintf(stderr, "[boot] working folder set to the game's: %s\n", exe_dir.string().c_str());
+#else
+            std::filesystem::path exe_dir;
+#if defined(__APPLE__)
+            { char m[PATH_MAX]; uint32_t sz = sizeof m; if (_NSGetExecutablePath(m, &sz) == 0) exe_dir = std::filesystem::weakly_canonical(m).parent_path(); }
+#else
+            { std::error_code ec; exe_dir = std::filesystem::read_symlink("/proc/self/exe", ec).parent_path(); }
+#endif
+            if (!exe_dir.empty() && tod_files_in(exe_dir, NULL) && chdir(exe_dir.c_str()) == 0)
+                fprintf(stderr, "[boot] working folder set to the game's: %s\n", exe_dir.string().c_str());
+#endif
         }
         if (!tod_files_in(".", &missing)) {
             /* TODO(tod): an ImGui first-run wizard (dod3-recomp src/ui/ + third_party/imgui) instead of text. */

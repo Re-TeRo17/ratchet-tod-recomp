@@ -53,6 +53,7 @@
 
 #include "ppu_recomp.h"
 #include "settings.h"
+#include "platform/tod_platform.h"   /* _stricmp off Windows */
 
 extern "C" {
 extern uint32_t g_rsx_engine_frame;                           /* rsx_draw_engine.c: present counter */

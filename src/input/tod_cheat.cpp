@@ -102,7 +102,7 @@
 #include <set>
 
 #include "ppu_recomp.h"        /* ppu_context, vm_*, func_XXXXXXXX declarations */
-#include "win32_compat.h"      /* GetTickCount64, GetAsyncKeyState */
+#include "platform/tod_platform.h"   /* win32_compat.h: GetTickCount64, GetAsyncKeyState; _stricmp off Windows */
 
 extern "C" unsigned g_tod_hero_handle;   /* src/main.cpp tod_fntrace: from set_follow_cam */
 extern "C" uint32_t g_rsx_engine_frame;                  /* rsx_draw_engine.c: present counter */
